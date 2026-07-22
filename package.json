@@ -1,0 +1,21 @@
+{
+  "name": "hotelio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --use-system-ca scripts/server.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node --use-system-ca scripts/server.mjs dist",
+    "test": "node --check src/main.js && node --check src/providers.js && node --test",
+    "android:sync": "npm run build && cap sync android",
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/core": "^8.4.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.2"
+  }
+}

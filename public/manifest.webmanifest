@@ -1,0 +1,10 @@
+{
+  "name": "Hotelio — Hoteles baratos",
+  "short_name": "Hotelio",
+  "description": "Compara alojamientos según tus preferencias.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f2eb",
+  "theme_color": "#102a2e",
+  "icons": [{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
