@@ -1,4 +1,4 @@
-const CACHE='hotelio-v3';
+const CACHE='hotelio-v4';
 const BASE=new URL('./',self.registration.scope).pathname;
 const ASSETS=[BASE,`${BASE}index.html`,`${BASE}manifest.webmanifest`,`${BASE}icon.svg`,`${BASE}src/main.js`,`${BASE}src/providers.js`,`${BASE}src/style.css`,`${BASE}src/components.css`,`${BASE}src/direct-search.css`,`${BASE}src/portal-status.css`,`${BASE}src/api-config.css`,`${BASE}src/saved.css`];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));

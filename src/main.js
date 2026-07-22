@@ -248,4 +248,4 @@ function openProviders(){
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 document.querySelector('#providersBtn').onclick=openProviders;
 updateSavedButton();
-if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));

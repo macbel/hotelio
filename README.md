@@ -48,4 +48,11 @@ El endpoint debe permitir CORS. Para portales comerciales, utiliza sus APIs ofic
 
 ## Compilar como APK
 
-El proyecto es una PWA instalable. Para generar un APK se puede añadir Capacitor (`@capacitor/core`, `@capacitor/cli`, `@capacitor/android`) y ejecutar `npx cap add android` después de instalar Android Studio, JDK y Android SDK.
+Hotelio incluye un proyecto Android basado en Capacitor 8. Requiere Node.js 22 o posterior, JDK 21 y Android SDK 36.
+
+```powershell
+npm.cmd install
+npm.cmd run android:apk
+```
+
+El APK de depuración se genera en `android/app/build/outputs/apk/debug/app-debug.apk`. La aplicación nativa contiene la interfaz web y consulta el backend público HTTPS de Hotelio para las búsquedas Stay22 y SerpApi.
