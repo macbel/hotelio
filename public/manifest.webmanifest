@@ -1,7 +1,7 @@
 {
-  "name": "Hotelio — Hoteles baratos",
+  "name": "Hotelio — Hoteles y vuelos",
   "short_name": "Hotelio",
-  "description": "Compara alojamientos según tus preferencias.",
+  "description": "Compara alojamientos y consulta vuelos según tus preferencias.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f5f2eb",

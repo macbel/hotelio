@@ -1,4 +1,5 @@
-import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.1.1';
+import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.1';
+import {mountFlightSearch} from './flights.js?v=1.2.1';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -18,9 +19,10 @@ const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 5);
 
 document.querySelector('#app').innerHTML = `
   <main class="shell">
-    <nav class="topbar"><div class="brand"><span class="brand-mark">H</span> Hotelio</div><div class="nav-actions"><button class="ghost saved-nav" id="savedBtn">♡ Guardados <span id="savedCount">0</span></button></div></nav>
-    <section class="hero"><div><div class="eyebrow">Tu viaje, al precio justo</div><h1>Duerme bien.<br>Ahorra más.</h1><p>Compara en un solo lugar los alojamientos de tus proveedores favoritos y encuentra la opción que encaja contigo.</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="hotel"><div class="windows"><i></i><i></i><i></i><i></i></div></div></div></section>
-    <form class="search-card" id="searchForm">
+    <nav class="topbar"><div class="brand"><span class="brand-mark">H</span> Hotelio</div><div class="nav-actions"><div class="travel-switch" aria-label="Tipo de búsqueda"><button class="travel-switch-btn is-active" type="button" data-travel-view="hotels">⌂ Alojamientos</button><button class="travel-switch-btn" type="button" data-travel-view="flights">✈ Vuelos</button></div><button class="ghost saved-nav" id="savedBtn">♡ Guardados <span id="savedCount">0</span></button></div></nav>
+    <section id="hotelView" class="travel-view">
+      <section class="hero"><div><div class="eyebrow">Tu viaje, al precio justo</div><h1>Duerme bien.<br>Ahorra más.</h1><p>Compara en un solo lugar los alojamientos de tus proveedores favoritos y encuentra la opción que encaja contigo.</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="hotel"><div class="windows"><i></i><i></i><i></i><i></i></div></div></div></section>
+      <form class="search-card" id="searchForm">
       <div class="fields">
         <div class="field"><label for="destination">Destino</label><input id="destination" required placeholder="¿Adónde quieres ir?" value="Valencia"></div>
         <div class="field"><label for="checkIn">Entrada</label><input id="checkIn" type="date" required min="${iso(today)}" value="${iso(tomorrow)}"></div>
@@ -28,14 +30,29 @@ document.querySelector('#app').innerHTML = `
         <div class="field"><label for="adults">Adultos</label><select id="adults"><option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="6">6 adultos</option></select></div>
         <div class="field"><label for="children">Niños</label><select id="children"><option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option><option value="3">3 niños</option><option value="4">4 niños</option></select></div>
         <div class="field"><label>Precio/noche (opcional)</label><div class="range-row"><input id="minPrice" type="number" min="0" placeholder="Mín." aria-label="Precio mínimo"><span>—</span><input id="maxPrice" type="number" min="1" placeholder="Máx." aria-label="Precio máximo"></div></div>
-        <div class="field"><label for="accommodationType">Tipo (opcional)</label><select id="accommodationType"><option value="any" selected>Cualquiera</option><option value="hotel">Hotel</option><option value="apartment">Apartamento / aparthotel</option><option value="hostel">Hostal / albergue</option><option value="resort">Resort</option><option value="bed_and_breakfast">Casa rural / B&amp;B</option></select></div>
+        <div class="field"><label for="accommodationType">Tipo (opcional)</label><select id="accommodationType"><option value="any" selected>Cualquiera</option><option value="beach_hotel">Hotel de playa</option><option value="boutique_hotel">Hotel boutique</option><option value="spa_hotel">Hotel con spa</option><option value="apartment">Apartamento</option><option value="apartment_hotel">Aparthotel</option><option value="hostel">Hostel / albergue</option><option value="inn">Posada</option><option value="motel">Motel</option><option value="resort">Resort</option><option value="bed_and_breakfast">Bed &amp; breakfast</option></select></div>
         <div class="field"><label for="board">Régimen (opcional)</label><select id="board"><option value="any" selected>Cualquiera</option><option value="room_only">Solo alojamiento</option><option value="breakfast">AD · Alojamiento y desayuno</option><option value="half_board">MP · Media pensión</option><option value="full_board">PC · Pensión completa</option><option value="all_inclusive">Todo incluido</option></select></div>
         <div class="child-ages" id="childAges" hidden></div>
         <button class="search-btn" type="submit">Buscar el mejor precio →</button>
       </div>
-    </form>
-    <section id="results"><div class="empty">Introduce tus preferencias y empieza a comparar.</div></section>
+      </form>
+      <section id="results"><div class="empty">Introduce tus preferencias y empieza a comparar.</div></section>
+    </section>
+    <section id="flightView" class="travel-view" hidden></section>
   </main><div id="modal"></div>`;
+
+mountFlightSearch('#flightView');
+const setTravelView=view=>{
+  const flights=view==='flights';
+  document.querySelector('#hotelView').hidden=flights;
+  document.querySelector('#flightView').hidden=!flights;
+  document.querySelector('#savedBtn').hidden=flights;
+  document.querySelectorAll('[data-travel-view]').forEach(button=>button.classList.toggle('is-active',button.dataset.travelView===view));
+  const hash=flights?'#vuelos':'';
+  if(location.hash!==hash)history.replaceState(null,'',`${location.pathname}${location.search}${hash}`);
+};
+document.querySelectorAll('[data-travel-view]').forEach(button=>button.addEventListener('click',()=>setTravelView(button.dataset.travelView)));
+setTravelView(location.hash==='#vuelos'?'flights':'hotels');
 
 const money = (value, currency='EUR') => new Intl.NumberFormat('es-ES',{style:'currency',currency,maximumFractionDigits:0}).format(value);
 const nightsBetween = (a,b) => Math.max(1, Math.round((new Date(b)-new Date(a))/86400000));
@@ -43,7 +60,7 @@ const esc = text => String(text ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<
 const newId=()=>crypto.randomUUID?.()||`hotel-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const normalized=text=>String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-');
 const optionalNumber=id=>{const value=document.querySelector(id).value.trim();return value===''?null:Number(value)};
-const accommodationLabels={any:'Cualquier alojamiento',hotel:'Hotel',apartment:'Apartamento / aparthotel',hostel:'Hostal / albergue',resort:'Resort',bed_and_breakfast:'Casa rural / B&B'};
+const accommodationLabels={any:'Cualquier alojamiento',beach_hotel:'Hotel de playa',boutique_hotel:'Hotel boutique',spa_hotel:'Hotel con spa',apartment:'Apartamento',apartment_hotel:'Aparthotel',hostel:'Hostel / albergue',inn:'Posada',motel:'Motel',resort:'Resort',bed_and_breakfast:'Bed & breakfast'};
 const boardLabels={any:'Cualquier régimen',room_only:'Solo alojamiento',breakfast:'Alojamiento y desayuno',half_board:'Media pensión',full_board:'Pensión completa',all_inclusive:'Todo incluido'};
 const withinPrice=(price,query)=>(query.minPrice===null||price>=query.minPrice)&&(query.maxPrice===null||price<=query.maxPrice);
 const priceLabel=query=>query.minPrice===null&&query.maxPrice===null?'Sin límite de precio':query.minPrice===null?`Hasta ${query.maxPrice} €/noche`:query.maxPrice===null?`Desde ${query.minPrice} €/noche`:`${query.minPrice}–${query.maxPrice} €/noche`;
@@ -99,40 +116,33 @@ function saveHotelOffer(hotel,query,{manual=false}={}){
 
 function directSearches(query) {
   const destination=encodeURIComponent(query.destination), childAges=query.childrenAges;
-  const expediaChildren=encodeURIComponent(childAges.map((age,i)=>`${age}_${i+1}`).join(','));
-  const kayakOccupancy=`${query.adults}adults${childAges.length?`/${query.children}children-${childAges.join('-')}`:''}`;
-  const bookingPrice=query.minPrice===null&&query.maxPrice===null?'':`&nflt=${encodeURIComponent(`price=EUR-${query.minPrice??0}-${query.maxPrice??99999}-1`)}`;
-  const expediaPrice=`${query.minPrice===null?'':`&price=${query.minPrice}`}${query.maxPrice===null?'':`&price=${query.maxPrice}`}`;
-  const publicNote=`Fechas y ocupantes · ${priceLabel(query)}`;
-  const destinationKey=query.destination.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
-  const portalDestinations={
-    salou:{trivago:'https://www.trivago.es/es/odr/hoteles-salou-espa%C3%B1a?search=200-53957',hostelworld:{q:'Salou, Catalonia, Spain',country:'Catalonia, Spain',city:'Salou',id:'800'}},
-    valencia:{trivago:'https://www.trivago.es/es/odr/hoteles-valencia-espa%C3%B1a?search=200-53826'}
-  };
-  const portalDestination=portalDestinations[destinationKey], hostelworld=portalDestination?.hostelworld;
+  const expediaChildren=childAges.map((age,index)=>`&Room1-Child${index+1}Age=${age}`).join('');
+  const expediaUrl=`https://www.expedia.com/go/hotel/search/Destination/${query.checkIn}/${query.checkOut}?SearchType=Destination&CityName=${destination}&InDate=${query.checkIn}&OutDate=${query.checkOut}&NumRoom=1&NumAdult-Room1=${query.adults}&NumChild-Room1=${query.children}${expediaChildren}`;
+  const documentedNote=`Destino, fechas y ocupantes enviados · ${priceLabel(query)}, tipo y régimen: confirmar`;
   return [
-    {name:'Booking.com', public:true, note:publicNote, url:`https://www.booking.com/searchresults.es.html?ss=${destination}&checkin=${query.checkIn}&checkout=${query.checkOut}&group_adults=${query.adults}&no_rooms=${query.rooms}&group_children=${query.children}${childAges.map(age=>`&age=${age}`).join('')}${bookingPrice}`},
-    {name:'Expedia', public:true, note:publicNote, url:`https://www.expedia.es/Hotel-Search?destination=${destination}&startDate=${query.checkIn}&endDate=${query.checkOut}&rooms=1&adults=${query.adults}${childAges.length?`&children=${expediaChildren}`:''}${expediaPrice}`},
-    {name:'Hotels.com', public:true, note:publicNote, url:`https://www.hotels.com/Hotel-Search?destination=${destination}&startDate=${query.checkIn}&endDate=${query.checkOut}&rooms=1&adults=${query.adults}${childAges.length?`&children=${expediaChildren}`:''}${expediaPrice}`},
-    {name:'Google Hotels', note:'Destino incluido · fechas, ocupantes y precio se eligen allí', manual:true, url:`https://www.google.com/travel/hotels?q=${encodeURIComponent('hoteles en '+query.destination)}`},
-    {name:'Kayak', public:true, note:'Destino, fechas, adultos y edades de los niños incluidos · precio se ajusta allí', url:`https://www.kayak.es/hotels/${destination}/${query.checkIn}/${query.checkOut}/${kayakOccupancy}`},
-    {name:'Momondo', public:true, note:'Destino, fechas, adultos y edades de los niños incluidos · precio se ajusta allí', url:`https://www.momondo.es/hotels/${destination}/${query.checkIn}/${query.checkOut}/${kayakOccupancy}`},
-    {name:'HotelsCombined', public:true, note:'Destino, fechas, adultos y edades de los niños incluidos · precio se ajusta allí', url:`https://www.hotelscombined.es/hotels/${destination}/${query.checkIn}/${query.checkOut}/${kayakOccupancy}`},
-    {name:'Trivago', note:portalDestination?.trivago?'Destino incluido · fechas, huéspedes y precio se eligen allí':'Requiere seleccionar destino, fechas y precio en Trivago', manual:true, url:portalDestination?.trivago||'https://www.trivago.es/es-US'},
-    {name:'Hostelworld', note:hostelworld?'Destino, fechas y huéspedes incluidos · precio se elige allí':'Requiere seleccionar destino, fechas y precio en Hostelworld', manual:true, url:hostelworld?`https://www.hostelworld.com/pwa/s?q=${encodeURIComponent(hostelworld.q)}&country=${encodeURIComponent(hostelworld.country)}&city=${encodeURIComponent(hostelworld.city)}&type=city&id=${hostelworld.id}&from=${query.checkIn}&to=${query.checkOut}&guests=${query.guests}&page=1`:'https://www.hostelworld.com/'},
-    {name:'eDreams', note:'Selecciona destino, fechas, ocupantes y precio en eDreams', manual:true, url:'https://www.edreams.es/hoteles/'},
-    {name:'lastminute.com', note:'Selecciona los filtros dentro de Lastminute', manual:true, url:'https://www.es.lastminute.com/hoteles/'},
-    {name:'Rumbo', note:'Selecciona los filtros dentro de Rumbo', manual:true, url:'https://www.rumbo.es/hoteles'},
-    {name:'Agoda', note:'Selecciona destino, fechas, ocupantes y precio en Agoda', manual:true, url:'https://www.agoda.com/'},
-    {name:'Trip.com', note:'Selecciona los filtros dentro de Trip.com', manual:true, url:'https://es.trip.com/hotels/'},
-    {name:'Skyscanner', note:'Selecciona los filtros dentro de Skyscanner', manual:true, url:'https://www.skyscanner.es/hoteles'}
+    {name:'Booking.com',status:'confirm',note:'Sin parámetros internos: selecciona todos los filtros dentro de Booking',url:'https://www.booking.com/index.es.html'},
+    {name:'Expedia',status:'approximate',note:documentedNote,url:expediaUrl},
+    {name:'Hotels.com',status:'confirm',note:'Selecciona destino, fechas, ocupantes, precio, tipo y régimen en Hotels.com',url:'https://www.hotels.com/'},
+    {name:'Google Hotels',status:'confirm',note:'Selecciona todos los filtros dentro de Google Hotels',url:'https://www.google.com/travel/hotels'},
+    {name:'KAYAK',status:'confirm',note:'Sin deeplink automatizado: selecciona todos los filtros dentro de KAYAK',url:'https://www.kayak.es/hotels'},
+    {name:'Momondo',status:'confirm',note:'Selecciona todos los filtros dentro de Momondo',url:'https://www.momondo.es/hotels'},
+    {name:'HotelsCombined',status:'confirm',note:'Selecciona todos los filtros dentro de HotelsCombined',url:'https://www.hotelscombined.es/'},
+    {name:'Trivago',status:'confirm',note:'Sin identificadores internos: selecciona todos los filtros dentro de Trivago',url:'https://www.trivago.es/'},
+    {name:'Hostelworld',status:'confirm',note:'Sin identificadores internos: selecciona todos los filtros dentro de Hostelworld',url:'https://www.hostelworld.com/'},
+    {name:'eDreams',status:'confirm',note:'Selecciona todos los filtros dentro de eDreams',url:'https://www.edreams.es/hoteles/'},
+    {name:'lastminute.com',status:'confirm',note:'Selecciona todos los filtros dentro de Lastminute',url:'https://www.es.lastminute.com/hoteles/'},
+    {name:'Rumbo',status:'confirm',note:'Selecciona todos los filtros dentro de Rumbo',url:'https://www.rumbo.es/hoteles'},
+    {name:'Agoda',status:'confirm',note:'Selecciona todos los filtros dentro de Agoda',url:'https://www.agoda.com/'},
+    {name:'Trip.com',status:'confirm',note:'Selecciona todos los filtros dentro de Trip.com',url:'https://es.trip.com/hotels/'},
+    {name:'Skyscanner',status:'confirm',note:'Selecciona todos los filtros dentro de Skyscanner',url:'https://www.skyscanner.es/hoteles'}
   ];
 }
 
 function renderDirectSearches(query) {
   const people=`${query.adults} ${query.adults===1?'adulto':'adultos'}${query.children?` · ${query.children} ${query.children===1?'niño':'niños'} (${query.childrenAges.join(', ')} años)`:''}`;
   const preferences=`${accommodationLabels[query.accommodationType]} · ${boardLabels[query.board]} · ${priceLabel(query)}`;
-  return `<section class="direct-search"><div class="results-head"><div><span class="eyebrow">Búsqueda real sin cuenta</span><h2>Consultar en otras webs</h2><p>${esc(query.destination)} · ${query.nights} noches · ${esc(people)}</p><p class="search-preferences">${esc(preferences)}</p></div></div><div class="portal-grid">${directSearches(query).map(p=>`<a class="portal ${p.manual?'portal-manual':''}" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="portal-logo">${esc(p.name.slice(0,1))}</span><span><strong>${esc(p.name)} ${p.manual?'<i>Manual</i>':p.public?'<i class="public-link">Público</i>':''}</strong><small>${esc(p.note)}</small></span><b>↗</b></a>`).join('')}</div><p class="direct-note">Los enlaces públicos reciben automáticamente los filtros que admite cada web. El tipo y el régimen deben confirmarse en el portal cuando su URL pública no permite transmitirlos.</p></section>`;
+  const statusLabels={applied:'Aplicado',approximate:'Aproximado',confirm:'Confirmar en la web'};
+  return `<section class="direct-search"><div class="results-head"><div><span class="eyebrow">Búsqueda real sin cuenta</span><h2>Consultar en otras webs</h2><p>${esc(query.destination)} · ${query.nights} noches · ${esc(people)}</p><p class="search-preferences">${esc(preferences)}</p></div></div><div class="filter-legend"><span class="filter-badge applied">Aplicado</span><span class="filter-badge approximate">Aproximado</span><span class="filter-badge confirm">Confirmar en la web</span></div><div class="portal-grid">${directSearches(query).map(p=>`<a class="portal ${p.status==='confirm'?'portal-manual':''}" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="portal-logo">${esc(p.name.slice(0,1))}</span><span><strong>${esc(p.name)} <i class="filter-badge ${esc(p.status)}">${esc(statusLabels[p.status])}</i></strong><small>${esc(p.note)}</small></span><b>↗</b></a>`).join('')}</div><p class="direct-note">Solo Expedia recibe destino, fechas y ocupantes mediante un deeplink documentado. Ninguna de estas webs permite garantizar por URL el precio, el tipo o el régimen; por eso Hotelio ya no envía parámetros internos o inventados.</p></section>`;
 }
 
 function renderChildAges() {
@@ -144,10 +154,11 @@ document.querySelector('#children').addEventListener('change',renderChildAges);
 
 function renderResults(query) {
   const root = document.querySelector('#results');
+  const filterStatusLabels={applied:'Aplicado',approximate:'Aproximado',confirm:'Confirmar en la web'};
   const stay22Notice=results.some(result=>String(result.provider).startsWith('Stay22'))?`<p class="provider-notice"><strong>Stay22:</strong> ${query.children?'ha transmitido el número de niños, pero no sus edades. Confírmalas al abrir la oferta. ':''}Sus resultados se consultan en tiempo real y no se guardan automáticamente.</p>`:'';
   const providerNotices=notices.length?`<p class="provider-notice">${notices.map(esc).join(' · ')}</p>`:'';
   const connected=results.length ? `<div class="results-head"><div><h2>${results.length} alojamientos encontrados</h2><p>Ordenados por precio total · ${query.nights} noches</p></div></div>${providerNotices}${stay22Notice}<div class="result-list">${results.map((r,i)=>`
-    <article class="result" style="animation-delay:${i*45}ms"><div class="result-img">${['⌂','◇','◒','△'][i%4]}${r.image?`<img src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`:''}</div><div><div class="result-title"><h3>${esc(r.name)}</h3><button class="save-hotel ${r.persistable===false?'is-restricted':findSavedHotel(r,query)?'is-saved':''}" type="button" ${r.persistable===false?'disabled title="Stay22 solo permite consultar los resultados en tiempo real"':`data-save-result="${i}"`} aria-label="${r.persistable===false?'Resultado de consulta no guardable':`Guardar ${esc(r.name)}`}">${r.persistable===false?'Solo consulta':findSavedHotel(r,query)?'♥ Guardado':'♡ Guardar'}</button></div><div class="meta">★ ${esc(r.rating || '—')} · ${esc(r.location || query.destination)} · ${esc(r.provider)}</div><div class="chips">${(r.features||[]).slice(0,3).map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div></div><div class="price"><strong>${money(r.totalPrice,r.currency)}</strong><small>${money(r.nightlyPrice,r.currency)} / noche</small><a href="${esc(r.url || '#')}" target="_blank" rel="noopener">Ver oferta →</a></div></article>`).join('')}</div>`
+    <article class="result" style="animation-delay:${i*45}ms"><div class="result-img">${['⌂','◇','◒','△'][i%4]}${r.image?`<img src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`:''}</div><div><div class="result-title"><h3>${esc(r.name)}</h3><button class="save-hotel ${r.persistable===false?'is-restricted':findSavedHotel(r,query)?'is-saved':''}" type="button" ${r.persistable===false?'disabled title="Stay22 solo permite consultar los resultados en tiempo real"':`data-save-result="${i}"`} aria-label="${r.persistable===false?'Resultado de consulta no guardable':`Guardar ${esc(r.name)}`}">${r.persistable===false?'Solo consulta':findSavedHotel(r,query)?'♥ Guardado':'♡ Guardar'}</button></div><div class="meta">★ ${esc(r.rating || '—')} · ${esc(r.location || query.destination)} · ${esc(r.provider)} ${r.filterStatus?`<span class="filter-badge ${esc(r.filterStatus)}">${esc(filterStatusLabels[r.filterStatus]||'Confirmar en la web')}</span>`:''}</div><div class="chips">${(r.features||[]).slice(0,3).map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div></div><div class="price"><strong>${money(r.totalPrice,r.currency)}</strong><small>${money(r.nightlyPrice,r.currency)} / noche</small><a href="${esc(r.url || '#')}" target="_blank" rel="noopener">Ver oferta →</a></div></article>`).join('')}</div>`
     : ((errors.length||notices.length) ? `<div class="provider-errors">${esc([...notices,...errors].join(' · '))}</div>` : '');
   root.innerHTML=renderDirectSearches(query)+connected;
   root.querySelectorAll('.result-img img').forEach(image=>image.addEventListener('error',()=>image.remove(),{once:true}));
@@ -162,11 +173,7 @@ document.querySelector('#searchForm').addEventListener('submit', async e => {
   btn.disabled=true; btn.textContent='Comparando…'; document.querySelector('#results').innerHTML='<div class="loading"><i></i><i></i><i></i></div>';
   errors=[];notices=[];
   const configuredProviders=await providerConfigurationPromise;
-  const jobs=configuredProviders.filter(provider=>provider.enabled).flatMap(provider=>{
-    if(query.board!=='any'&&!provider.capabilities?.board){notices.push(`${provider.name} no se consulta porque no permite filtrar el régimen seleccionado.`);return []}
-    if(query.accommodationType!=='any'&&!provider.capabilities?.accommodationType){notices.push(`${provider.name} no se consulta porque no permite filtrar el tipo de alojamiento con fiabilidad.`);return []}
-    return [{name:provider.name,run:()=>searchPublicProvider(provider,query)}];
-  });
+  const jobs=configuredProviders.filter(provider=>provider.enabled).map(provider=>({name:provider.name,run:()=>searchPublicProvider(provider,query)}));
   const settled=await Promise.allSettled(jobs.map(job=>job.run()));
   results=settled.flatMap((r,i)=>{if(r.status==='rejected'){errors.push(r.reason?.message||jobs[i]?.name);return []}if(r.value.notice)notices.push(r.value.notice);return r.value.results}).filter(r=>withinPrice(Number(r.nightlyPrice),query)).sort((a,b)=>a.totalPrice-b.totalPrice);
   renderResults(query); btn.disabled=false; btn.textContent='Buscar el mejor precio →';
@@ -233,4 +240,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=6'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=8'));

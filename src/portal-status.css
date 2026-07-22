@@ -1,4 +1,9 @@
-.portal strong i{font:700 9px 'DM Sans';text-transform:uppercase;letter-spacing:.06em;background:#ece7dc;color:#756c59;border-radius:999px;padding:4px 6px;margin-left:5px}
-.portal strong i.public-link{background:#dff1e8;color:#28664d}
+.filter-legend{display:flex;flex-wrap:wrap;gap:7px;margin:-6px 0 14px}
+.filter-badge,.portal strong i.filter-badge{display:inline-flex;align-items:center;width:max-content;font:700 9px 'DM Sans';font-style:normal;text-transform:uppercase;letter-spacing:.055em;border-radius:999px;padding:4px 7px;margin-left:5px;vertical-align:middle}
+.filter-legend .filter-badge{margin-left:0}
+.filter-badge.applied,.portal strong i.filter-badge.applied{background:#dff1e8;color:#28664d}
+.filter-badge.approximate,.portal strong i.filter-badge.approximate{background:#fff0c9;color:#76570c}
+.filter-badge.confirm,.portal strong i.filter-badge.confirm{background:#ece7dc;color:#756c59}
+.result .meta .filter-badge{margin-top:5px}
 .portal-manual{background:#faf9f5}
 .portal-manual .portal-logo{background:#6e7b78;color:#fff}

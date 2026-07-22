@@ -30,7 +30,7 @@ function get_json($url, $headers = array()) {
         CURLOPT_CONNECTTIMEOUT => 12,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_HTTPHEADER => array_merge(array('Accept: application/json'), $headers),
-        CURLOPT_USERAGENT => 'Hotelio/1.1'
+        CURLOPT_USERAGENT => 'Hotelio/1.2'
     ));
     $raw = curl_exec($curl);
     $status = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
@@ -66,13 +66,32 @@ function accommodation_matches($hotel, $wanted) {
     if ($wanted === '' || $wanted === 'any') return true;
     $text = strtolower((string) ($hotel['type'] ?? '') . ' ' . (string) ($hotel['name'] ?? ''));
     $patterns = array(
-        'hotel' => '/hotel/',
-        'apartment' => '/apartment|apartamento|aparthotel|vacation rental/',
+        'beach_hotel' => '/beach hotel|hotel de playa/',
+        'boutique_hotel' => '/boutique/',
+        'spa_hotel' => '/spa hotel|hotel spa|hotel con spa/',
+        'apartment' => '/apartment|apartamento|vacation rental/',
+        'apartment_hotel' => '/apartment hotel|aparthotel/',
         'hostel' => '/hostel|hostal|albergue/',
+        'inn' => '/inn|posada/',
+        'motel' => '/motel/',
         'resort' => '/resort/',
-        'bed_and_breakfast' => '/bed.{0,5}breakfast|b&b|guesthouse|casa rural|inn/'
+        'bed_and_breakfast' => '/bed.{0,5}breakfast|b&b/'
     );
     return isset($patterns[$wanted]) ? (bool) preg_match($patterns[$wanted], $text) : true;
+}
+
+function stay22_filter_status($accommodationType, $board, $children) {
+    if ($board !== 'any') return 'confirm';
+    if ($accommodationType !== 'any' || $children > 0) return 'approximate';
+    return 'applied';
+}
+
+function stay22_filter_notice($accommodationType, $board, $children) {
+    $notices = array();
+    if ($accommodationType !== 'any') $notices[] = 'Stay22 no recibe un filtro de tipo: Hotelio aproxima el resultado usando el tipo devuelto por el proveedor.';
+    if ($board !== 'any') $notices[] = 'Stay22 no permite filtrar el régimen con fiabilidad: debe confirmarse en el proveedor.';
+    if ($children > 0) $notices[] = 'Stay22 recibe el número de niños, pero no sus edades: deben confirmarse en el proveedor.';
+    return implode(' ', $notices);
 }
 
 function stay22_attributed_url($url, $aid) {
@@ -89,15 +108,19 @@ function stay22_attributed_url($url, $aid) {
     return $rebuilt;
 }
 
-function serpapi_search_text($destination, $board) {
-    $prefixes = array(
-        'room_only' => 'hoteles solo alojamiento en ',
-        'breakfast' => 'hoteles con desayuno incluido en ',
-        'half_board' => 'hoteles con media pensión en ',
-        'full_board' => 'hoteles con pensión completa en ',
-        'all_inclusive' => 'hoteles todo incluido en '
-    );
-    return ($prefixes[$board] ?? 'hoteles en ') . $destination;
+function serpapi_filter_status($accommodationType, $board) {
+    if ($accommodationType === 'apartment' && $board !== 'any') return 'confirm';
+    if (in_array($board, array('room_only', 'half_board', 'full_board'), true)) return 'confirm';
+    if (in_array($board, array('breakfast', 'all_inclusive'), true)) return 'approximate';
+    return 'applied';
+}
+
+function serpapi_filter_notice($accommodationType, $board) {
+    if ($accommodationType === 'apartment' && $board !== 'any') return 'Google Vacation Rentals no ofrece filtros de régimen para apartamentos: debe confirmarse en el proveedor.';
+    if ($board === 'breakfast') return 'SerpApi ha filtrado alojamientos que ofrecen desayuno. Confirma que la tarifa elegida lo incluya.';
+    if ($board === 'all_inclusive') return 'SerpApi ha filtrado alojamientos con opción de todo incluido. Confirma que la tarifa elegida corresponda a ese régimen.';
+    if (in_array($board, array('room_only', 'half_board', 'full_board'), true)) return 'SerpApi no dispone de un filtro exacto para este régimen: debe confirmarse en el proveedor.';
+    return '';
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(405, array('error' => 'Método no permitido'));
@@ -124,10 +147,13 @@ $accommodationType = (string) ($query['accommodationType'] ?? 'any');
 $board = (string) ($query['board'] ?? 'any');
 if ($destination === '' || $checkin === '' || $checkout === '') respond(400, array('error' => 'Destino y fechas son obligatorios'));
 if ($minimum !== null && $maximum !== null && $minimum > $maximum) respond(400, array('error' => 'El precio mínimo no puede superar al máximo'));
+$allowedAccommodationTypes = array('any', 'beach_hotel', 'boutique_hotel', 'spa_hotel', 'apartment', 'apartment_hotel', 'hostel', 'inn', 'motel', 'resort', 'bed_and_breakfast');
+$allowedBoards = array('any', 'room_only', 'breakfast', 'half_board', 'full_board', 'all_inclusive');
+if (!in_array($accommodationType, $allowedAccommodationTypes, true)) respond(400, array('error' => 'Tipo de alojamiento no válido'));
+if (!in_array($board, $allowedBoards, true)) respond(400, array('error' => 'Régimen no válido'));
 
 try {
     if ($provider === 'stay22') {
-        if ($board !== 'any') respond(200, array('results' => array(), 'notice' => 'Stay22 no permite filtrar el régimen con fiabilidad.'));
         $params = array('address' => $destination, 'checkin' => $checkin, 'checkout' => $checkout, 'adults' => $adults, 'children' => $children, 'rooms' => $rooms, 'currency' => 'EUR', 'pageSize' => 50);
         $data = get_json('https://api.stay22.com/v2/accommodations?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986));
         $supplierNames = array('booking' => 'Booking.com', 'expedia' => 'Expedia', 'hotelscom' => 'Hotels.com', 'vrbo' => 'Vrbo');
@@ -162,37 +188,42 @@ try {
                 'accommodationType' => $hotel['type'] ?? null,
                 'url' => stay22_attributed_url($best['offer']['link'] ?? ($hotel['url'] ?? ''), (string) ($providerConfig['aid'] ?? 'hotelio')),
                 'provider' => 'Stay22 · ' . ($supplierNames[$best['supplier']] ?? $best['supplier']),
-                'persistable' => false
+                'persistable' => false,
+                'filterStatus' => stay22_filter_status($accommodationType, $board, $children)
             );
         }
-        respond(200, array('results' => $results));
+        respond(200, array('results' => $results, 'notice' => stay22_filter_notice($accommodationType, $board, $children)));
     }
 
     if ($provider === 'serpapi') {
         $token = trim((string) ($providerConfig['api_key'] ?? ''));
         if ($token === '') respond(503, array('error' => 'SerpApi no está configurado'));
         $params = array(
-            'engine' => 'google_hotels', 'q' => serpapi_search_text($destination, $board),
+            'engine' => 'google_hotels', 'q' => 'hoteles en ' . $destination,
             'check_in_date' => $checkin, 'check_out_date' => $checkout,
             'adults' => $adults, 'children' => $children, 'currency' => 'EUR',
             'hl' => 'es', 'gl' => 'es', 'sort_by' => 3, 'api_key' => $token
         );
         if ($minimum !== null) $params['min_price'] = $minimum;
         if ($maximum !== null) $params['max_price'] = $maximum;
-        $propertyTypes = array('apartment' => '1,21', 'hostel' => '14', 'resort' => '17', 'bed_and_breakfast' => '19');
+        $propertyTypes = array('beach_hotel' => '12', 'boutique_hotel' => '13', 'hostel' => '14', 'inn' => '15', 'motel' => '16', 'resort' => '17', 'spa_hotel' => '18', 'bed_and_breakfast' => '19', 'apartment_hotel' => '21', 'apartment' => '1');
         if ($accommodationType === 'apartment') $params['vacation_rentals'] = 'true';
         if (isset($propertyTypes[$accommodationType])) $params['property_types'] = $propertyTypes[$accommodationType];
+        $boardAmenities = array('breakfast' => '9', 'all_inclusive' => '52');
+        if ($accommodationType !== 'apartment' && isset($boardAmenities[$board])) $params['amenities'] = $boardAmenities[$board];
         $ages = array_map(function($age) { return max(1, (int) $age); }, $query['childrenAges'] ?? array());
         if ($ages) $params['children_ages'] = implode(',', $ages);
         $data = get_json('https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986));
         if (!empty($data['error'])) throw new Exception(is_string($data['error']) ? $data['error'] : 'Error de SerpApi');
         $results = array();
         foreach (($data['properties'] ?? array()) as $index => $hotel) {
-            if ($accommodationType === 'hotel' && !accommodation_matches($hotel, 'hotel')) continue;
             $nightly = (float) ($hotel['rate_per_night']['extracted_lowest'] ?? ($hotel['price_per_night']['extracted_price'] ?? ($hotel['extracted_price'] ?? 0)));
             if ($nightly <= 0 || !price_matches($nightly, $minimum, $maximum)) continue;
             $total = (float) ($hotel['total_rate']['extracted_lowest'] ?? ($hotel['total_price']['extracted_price'] ?? ($nightly * $nights)));
             $image = $hotel['images'][0]['thumbnail'] ?? ($hotel['thumbnail'] ?? null);
+            $features = array_slice($hotel['amenities'] ?? array(), 0, 3);
+            if ($accommodationType !== 'apartment' && $board === 'breakfast') array_unshift($features, 'Desayuno disponible');
+            if ($accommodationType !== 'apartment' && $board === 'all_inclusive') array_unshift($features, 'Todo incluido disponible');
             $results[] = array(
                 'id' => $hotel['property_token'] ?? ('serpapi-' . $index),
                 'name' => $hotel['name'] ?? 'Alojamiento',
@@ -201,14 +232,15 @@ try {
                 'totalPrice' => $total,
                 'currency' => 'EUR',
                 'rating' => $hotel['overall_rating'] ?? ($hotel['rating'] ?? null),
-                'features' => array_slice($hotel['amenities'] ?? array(), 0, 3),
+                'features' => array_slice(array_values(array_unique($features)), 0, 3),
                 'image' => $image,
                 'accommodationType' => $hotel['type'] ?? null,
                 'url' => $hotel['link'] ?? ('https://www.google.com/travel/hotels?q=' . rawurlencode($hotel['name'] ?? $destination)),
-                'provider' => 'SerpApi · Google Hotels'
+                'provider' => 'SerpApi · Google Hotels',
+                'filterStatus' => serpapi_filter_status($accommodationType, $board)
             );
         }
-        respond(200, array('results' => $results));
+        respond(200, array('results' => $results, 'notice' => serpapi_filter_notice($accommodationType, $board)));
     }
 
     respond(400, array('error' => 'Proveedor no compatible'));
