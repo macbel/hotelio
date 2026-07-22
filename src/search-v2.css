@@ -1,0 +1,5 @@
+.result-img{overflow:hidden;position:relative}
+.result-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.search-preferences{font-size:12px!important;font-weight:700;color:var(--ink)!important;margin-top:8px!important}
+@media(min-width:801px){.fields{grid-template-columns:1.6fr 1fr 1fr 1fr 1.2fr}.fields .search-btn{grid-column:4/6}}
+@media(max-width:520px){.fields{grid-template-columns:1fr}.field:first-child,.search-btn{grid-column:1}.result{grid-template-columns:76px 1fr}.result-img{height:82px}}

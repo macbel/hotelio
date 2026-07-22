@@ -1,6 +1,6 @@
 # Hotelio
 
-MVP móvil/PWA para comparar alojamientos según destino, fechas, ocupantes y rango de precios.
+MVP móvil/PWA para comparar alojamientos según destino, fechas, ocupantes y filtros opcionales.
 
 ## Ejecutar
 
@@ -12,7 +12,13 @@ Abre `http://localhost:4173`. En Android, desde Chrome, usa **Añadir a pantalla
 
 El servidor se inicia con `--use-system-ca` para respetar el almacén de certificados de Windows al conectar con las APIs externas.
 
-## Conectar un proveedor real
+## Proveedores centralizados
+
+Las credenciales se guardan en `.hotelio-config.php`, fuera de la carpeta pública `/hotelio`. Este archivo está ignorado por Git y nunca se entrega al navegador ni se incluye en el APK.
+
+El menú público de proveedores se ha eliminado. La administración está disponible únicamente en `/hotelio/admin/`, protegida con contraseña. Desde allí se puede activar Stay22 y guardar o sustituir la API key de SerpApi una sola vez; la configuración se aplica después a todos los usuarios de la web y del APK.
+
+Para desarrollo local, SerpApi puede activarse mediante la variable de entorno `HOTELIO_SERPAPI_KEY`.
 
 ### Stay22: activo con el Partner ID de Hotelio
 
@@ -22,29 +28,21 @@ La cuenta de Stay22 está asociada al Partner ID (AID) `hotelio`. Hotelio añade
 
 El rango en euros se vuelve a aplicar dentro de Hotelio. Conforme a las restricciones publicadas por Stay22, sus fichas se consultan en tiempo real y no se almacenan como favoritos permanentes.
 
-### Opción sencilla: solo una API key
+### SerpApi Google Hotels
 
-Hotelio trae un conector incorporado para **SerpApi Google Hotels**, con cuota gratuita mensual. Abre **Proveedores**, pulsa **Obtener clave**, crea una cuenta, copia la API key, pégala, marca **Activar** y guarda. No hace falta escribir endpoints.
+Hotelio trae un conector incorporado para **SerpApi Google Hotels**. La API key se introduce en el panel privado del servidor, no en cada dispositivo.
 
 - SerpApi: <https://serpapi.com/users/sign_up>
 
-Las peticiones pasan por el servidor local de Hotelio (`/api/search/...`). La clave queda en el almacenamiento local del navegador; para una publicación multiusuario se debería usar un almacén seguro del servidor.
+Las peticiones pasan por el servidor de Hotelio (`/api/search.php`). El navegador solo descarga el estado público de los proveedores desde `/api/providers.php`.
 
-### Conector HTTP avanzado
-
-En **Proveedores**, añade un endpoint HTTPS. Hotelio hace `POST` con:
+La búsqueda envía al backend:
 
 ```json
-{"destination":"Valencia","checkIn":"2026-08-01","checkOut":"2026-08-05","adults":2,"children":2,"childrenAges":[5,9],"guests":4,"rooms":1,"minPrice":20,"maxPrice":180,"currency":"EUR","nights":4}
+{"destination":"Valencia","checkIn":"2026-08-01","checkOut":"2026-08-05","adults":2,"children":2,"childrenAges":[5,9],"guests":4,"rooms":1,"minPrice":null,"maxPrice":180,"accommodationType":"hotel","board":"breakfast","currency":"EUR","nights":4}
 ```
 
-Respuesta esperada:
-
-```json
-{"results":[{"id":"offer-1","name":"Hotel Ejemplo","location":"Valencia","nightlyPrice":62,"totalPrice":248,"currency":"EUR","rating":8.4,"features":["Cancelación gratis"],"url":"https://proveedor.example/oferta"}]}
-```
-
-El endpoint debe permitir CORS. Para portales comerciales, utiliza sus APIs oficiales o un backend autorizado; extraer HTML directamente desde Android es frágil y puede incumplir sus condiciones.
+Los precios mínimo y máximo son opcionales. SerpApi admite filtros de tipo de alojamiento y Hotelio usa su búsqueda textual para el régimen. Stay22 no permite filtrar el régimen ni el tipo con la misma fiabilidad, por lo que se omite cuando se seleccionan esos filtros. Ambos conectores devuelven miniaturas cuando el proveedor dispone de ellas.
 
 ## Compilar como APK
 
