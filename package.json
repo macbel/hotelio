@@ -1,7 +1,7 @@
 {
   "name": "hotelio",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.2.2",
   "type": "module",
   "scripts": {
     "dev": "node --use-system-ca scripts/server.mjs",

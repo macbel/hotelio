@@ -1,0 +1,7 @@
+{
+  "versionCode": 6,
+  "versionName": "1.2.2",
+  "apkUrl": "https://www.alufi.es/hotelio/downloads/hotelio-1.2.2.apk",
+  "sha256": "923f6e535924dfc4f0d4338bef10178847019111986c75997255344fe2ac5a8f",
+  "releaseNotes": "Mejora el formulario de vuelos en móvil, añade el flujo de actualización y mantiene la opción de solo ida."
+}

@@ -10,4 +10,5 @@ android/app/build/
 android/local.properties
 
 artifacts/*.apk
+public/downloads/*.apk
 .hotelio-config.php
