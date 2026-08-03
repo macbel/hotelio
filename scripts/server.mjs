@@ -92,7 +92,9 @@ createServer(async (req,res)=>{
       if(!configuration?.enabled)return sendJson(res,503,{error:'Proveedor no disponible'});
       return sendJson(res,200,await searchPublicProvider(provider,body.query));
     }
-    let file=resolve(join(root,pathname==='/'?'index.html':pathname.slice(1)));
+    const relativePath=pathname==='/'?'index.html':pathname.slice(1);
+    let file=resolve(join(root,relativePath));
+    try{await stat(file)}catch{file=resolve(join(root,'public',relativePath))}
     if(!file.startsWith(root+sep)&&file!==root)throw new Error('Forbidden');
     if((await stat(file)).isDirectory())file=join(file,'index.html');
     if(extname(file)==='.php')throw new Error('PHP no se sirve como archivo estático');

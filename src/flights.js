@@ -16,8 +16,18 @@ function addDays(date,days){
 function defaultFlightEndpoint(){
   const native=Boolean(globalThis.Capacitor?.isNativePlatform?.());
   if(native)return 'https://www.alufi.es/hotelio/api/flights.php';
-  if(['localhost','127.0.0.1'].includes(location.hostname))return `${location.protocol}//${location.hostname}:4180/api/flights.php`;
+  if(['localhost','127.0.0.1'].includes(location.hostname))return 'https://www.alufi.es/hotelio/api/flights.php';
   return new URL('./api/flights.php',location.href).href;
+}
+
+async function searchFlights(query,{endpoint=defaultFlightEndpoint(),signal}={}){
+  const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({query}),signal});
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok){
+    const retry=Number(body.retryAfter)>0?` Podrás intentarlo de nuevo en unos ${Math.ceil(Number(body.retryAfter)/60)} minutos.`:'';
+    throw new Error(`${body.error||`Error HTTP ${response.status}`}${retry}`);
+  }
+  return body;
 }
 
 function defaultAirportDataUrl(){
@@ -62,6 +72,12 @@ function resolveAirportCode(value,airports=[]){
   const exactName=airports.filter(airport=>normalizedAirportText(airport.name)===wanted);
   if(exactName.length)return String(bestAirport(exactName)?.iata||'').toUpperCase();
   return '';
+}
+
+function showResolvedAirport(input,code){
+  const current=String(input.value||'').trim();
+  if(!code)return;
+  input.value=/^[A-Za-z]{3}$/.test(current)?code:/\([A-Za-z]{3}\)\s*$/.test(current)?current:`${current} (${code})`;
 }
 
 function safeGoogleFlightsUrl(value){
@@ -228,17 +244,14 @@ export function mountFlightSearch(container,options={}){
     await airportsReady;
     const query=readFlightQuery(form,airports),validation=validateFlightQuery(query);
     if(validation){output.innerHTML=`<div class="flight-error">${esc(validation)}</div>`;return}
+    showResolvedAirport(form.elements.origin,query.origin);
+    showResolvedAirport(form.elements.destination,query.destination);
     controller?.abort();
     const requestController=new AbortController();controller=requestController;
     const button=form.querySelector('.flight-submit');button.disabled=true;button.textContent='Buscando…';
     output.innerHTML='<div class="flight-loading"><i></i><i></i><i></i><span>Consultando una vez y buscando en la caché…</span></div>';
     try{
-      const response=await fetch(options.endpoint||defaultFlightEndpoint(),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({query}),signal:requestController.signal});
-      const body=await response.json().catch(()=>({}));
-      if(!response.ok){
-        const retry=Number(body.retryAfter)>0?` Podrás intentarlo de nuevo en unos ${Math.ceil(Number(body.retryAfter)/60)} minutos.`:'';
-        throw new Error(`${body.error||`Error HTTP ${response.status}`}${retry}`);
-      }
+      const body=await searchFlights(query,{endpoint:options.endpoint||defaultFlightEndpoint(),signal:requestController.signal});
       renderFlightResponse(output,body,query);
     }catch(error){
       if(error.name!=='AbortError')output.innerHTML=`<div class="flight-error"><strong>No se pudo completar la búsqueda.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`;
@@ -256,4 +269,4 @@ export function mountFlightSearch(container,options={}){
   return {destroy(){controller?.abort();root.replaceChildren()},form};
 }
 
-export {FLIGHT_PRICE_NOTICE,resolveAirportCode,validateFlightQuery};
+export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchFlights,showResolvedAirport,validateFlightQuery};

@@ -1,5 +1,6 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
 import {mountFlightSearch} from './flights.js?v=1.2.2';
+import {mountCombinedSearch} from './combined.js?v=1.2.2';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -19,7 +20,7 @@ const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 5);
 
 document.querySelector('#app').innerHTML = `
   <main class="shell">
-    <nav class="topbar"><div class="brand"><span class="brand-mark">H</span> Hotelio</div><div class="nav-actions"><div class="travel-switch" aria-label="Tipo de búsqueda"><button class="travel-switch-btn is-active" type="button" data-travel-view="hotels">⌂ Alojamientos</button><button class="travel-switch-btn" type="button" data-travel-view="flights">✈ Vuelos</button></div><button class="ghost saved-nav" id="savedBtn">♡ Guardados <span id="savedCount">0</span></button></div></nav>
+    <nav class="topbar"><div class="brand"><span class="brand-mark">H</span> Hotelio</div><div class="nav-actions"><div class="travel-switch" aria-label="Tipo de búsqueda"><button class="travel-switch-btn is-active" type="button" data-travel-view="hotels">⌂ Alojamientos</button><button class="travel-switch-btn" type="button" data-travel-view="flights">✈ Vuelos</button><button class="travel-switch-btn" type="button" data-travel-view="combined">✈+ Hotel + vuelo</button></div><button class="ghost saved-nav" id="savedBtn">♡ Guardados <span id="savedCount">0</span></button></div></nav>
     <section id="hotelView" class="travel-view">
       <section class="hero"><div><div class="eyebrow">Tu viaje, al precio justo</div><h1>Duerme bien.<br>Ahorra más.</h1><p>Compara en un solo lugar los alojamientos de tus proveedores favoritos y encuentra la opción que encaja contigo.</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="hotel"><div class="windows"><i></i><i></i><i></i><i></i></div></div></div></section>
       <form class="search-card" id="searchForm">
@@ -39,20 +40,24 @@ document.querySelector('#app').innerHTML = `
       <section id="results"><div class="empty">Introduce tus preferencias y empieza a comparar.</div></section>
     </section>
     <section id="flightView" class="travel-view" hidden></section>
+    <section id="combinedView" class="travel-view" hidden></section>
   </main><div id="modal"></div>`;
 
 mountFlightSearch('#flightView');
+mountCombinedSearch('#combinedView',{providersPromise:providerConfigurationPromise});
 const setTravelView=view=>{
   const flights=view==='flights';
-  document.querySelector('#hotelView').hidden=flights;
+  const combined=view==='combined';
+  document.querySelector('#hotelView').hidden=flights||combined;
   document.querySelector('#flightView').hidden=!flights;
-  document.querySelector('#savedBtn').hidden=flights;
+  document.querySelector('#combinedView').hidden=!combined;
+  document.querySelector('#savedBtn').hidden=flights||combined;
   document.querySelectorAll('[data-travel-view]').forEach(button=>button.classList.toggle('is-active',button.dataset.travelView===view));
-  const hash=flights?'#vuelos':'';
+  const hash=flights?'#vuelos':combined?'#hotel-vuelo':'';
   if(location.hash!==hash)history.replaceState(null,'',`${location.pathname}${location.search}${hash}`);
 };
 document.querySelectorAll('[data-travel-view]').forEach(button=>button.addEventListener('click',()=>setTravelView(button.dataset.travelView)));
-setTravelView(location.hash==='#vuelos'?'flights':'hotels');
+setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'?'combined':'hotels');
 
 const money = (value, currency='EUR') => new Intl.NumberFormat('es-ES',{style:'currency',currency,maximumFractionDigits:0}).format(value);
 const nightsBetween = (a,b) => Math.max(1, Math.round((new Date(b)-new Date(a))/86400000));
@@ -240,4 +245,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=9'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=10'));
