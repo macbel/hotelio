@@ -1,6 +1,7 @@
 const FLIGHT_PRICE_NOTICE='Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Vuelotel no gestiona pagos ni reservas.';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
+const whatsappUrl=text=>`https://wa.me/?text=${encodeURIComponent(text)}`;
 
 function localIso(date){
   const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');
@@ -18,6 +19,22 @@ function defaultFlightEndpoint(){
   if(native)return 'https://www.alufi.es/vuelotel/api/flights.php';
   if(['localhost','127.0.0.1'].includes(location.hostname))return 'https://www.alufi.es/vuelotel/api/flights.php';
   return new URL('./api/flights.php',location.href).href;
+}
+
+const nightsBetween=(from,to)=>Math.max(1,Math.round((new Date(to)-new Date(from))/86400000));
+
+function defaultFlightDealsEndpoint(){
+  const native=Boolean(globalThis.Capacitor?.isNativePlatform?.());
+  if(native)return 'https://www.alufi.es/vuelotel/api/flight-deals.php';
+  if(['localhost','127.0.0.1'].includes(location.hostname))return 'https://www.alufi.es/vuelotel/api/flight-deals.php';
+  return new URL('./api/flight-deals.php',location.href).href;
+}
+
+async function searchFlightDeals(query,{endpoint=defaultFlightDealsEndpoint(),signal}={}){
+  const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({query}),signal});
+  const body=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(body.error||`Error HTTP ${response.status}`);
+  return body;
 }
 
 async function searchFlights(query,{endpoint=defaultFlightEndpoint(),signal}={}){
@@ -178,6 +195,24 @@ function renderFlightResponse(output,body,query){
     ${roundtripNote}
     ${results.length?`<div class="flight-result-list">${results.map(renderFlightResult).join('')}</div>`:'<div class="flight-empty">No se han recibido opciones detalladas, pero puedes abrir la búsqueda completa con todos los filtros.</div>'}
     <div class="flight-confirm"><p>${esc(body.notice||FLIGHT_PRICE_NOTICE)}</p><a href="${esc(searchUrl)}" target="_blank" rel="noopener noreferrer">Confirmar precio en Google Flights ↗</a>${usage}</div>`;
+  output.querySelectorAll('.flight-result').forEach((card,index)=>{const option=results[index];if(!option)return;const airlines=Array.isArray(option.airlines)?option.airlines.filter(Boolean).join(', '):'Vuelo';const message=`Vuelotel · ${query.origin} → ${query.destination}\n${query.departureDate}${query.returnDate?` → ${query.returnDate}`:''}\n${airlines} · ${formatMoney(option.price,option.currency)}\n${searchUrl}`;card.querySelector('.flight-result-price')?.insertAdjacentHTML('beforeend',`<a class="share-whatsapp" href="${esc(whatsappUrl(message))}" target="_blank" rel="noopener noreferrer">Compartir por WhatsApp</a>`)});
+}
+
+function formatDate(value){
+  const date=new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime())?String(value||''):new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short',year:'numeric'}).format(date);
+}
+
+function renderFlightDeals(output,body){
+  const results=Array.isArray(body.results)?body.results:[];
+  if(!results.length){output.innerHTML=`<div class="flight-empty">${esc(body.notice||'No se encontraron destinos para ese intervalo.')}</div>`;return}
+  output.innerHTML=`<div class="flight-results-head"><div><span class="eyebrow">Fechas y destinos flexibles</span><h3>${results.length} destinos para explorar</h3></div>${body.cached?'<span class="flight-cache">Resultado reciente</span>':''}</div>
+    <p class="flight-info">${esc(body.notice||'Precios orientativos de Google Flights.')}</p>
+    <div class="flight-deal-list">${results.map(item=>`<article class="flight-deal">
+      <div><span class="flight-deal-code">${esc(item.destinationCode)}</span><h4>${esc(item.destinationName||item.destinationCode)}</h4><p>${esc(item.country||'Destino internacional')}</p></div>
+      <div class="flight-deal-dates"><strong>${esc(formatDate(item.departureDate))} → ${esc(formatDate(item.returnDate))}</strong><span>${nightsBetween(item.departureDate,item.returnDate)} noches${item.airline?` · ${esc(item.airline)}`:''}${Number.isFinite(Number(item.stops))?` · ${esc(stopLabel(item.stops))}`:''}</span></div>
+      <div class="flight-deal-price"><span><small>Vuelo desde</small><strong>${esc(formatMoney(item.flightPrice,item.currency))}</strong></span>${safeGoogleFlightsUrl(item.flightLink)?`<a href="${esc(safeGoogleFlightsUrl(item.flightLink))}" target="_blank" rel="noopener noreferrer">Ver oferta ↗</a>`:''}</div>
+    </article>`).join('')}</div>`;
 }
 
 /**
@@ -215,9 +250,23 @@ export function mountFlightSearch(container,options={}){
     <p class="flight-iata-help">Escribe una ciudad o un aeropuerto y elige una sugerencia; también puedes usar directamente MAD, BCN, FCO o JFK. Catálogo local de <a href="https://ourairports.com/data/" target="_blank" rel="noopener">OurAirports</a>; no consume búsquedas.</p>
     <p class="flight-legal">${esc(FLIGHT_PRICE_NOTICE)}</p>
     <div class="flight-output" aria-live="polite"></div>
+    <section class="flight-explore" aria-labelledby="flightExploreTitle">
+      <div class="flight-heading"><div><span class="eyebrow">Inspírate</span><h2 id="flightExploreTitle">Explorar destinos</h2><p>Encuentra los vuelos más baratos sin decidir antes el destino ni las fechas exactas.</p></div><span class="flight-provider">Google Flights Deals</span></div>
+      <form class="flight-explore-form" novalidate>
+        <div class="flight-grid flight-explore-grid">
+          <label class="flight-field"><span>Origen</span><input name="origin" list="hotelioAirportCodes" required autocomplete="off" placeholder="Madrid o MAD" value="${esc(defaults.origin||'')}"></label>
+          <label class="flight-field"><span>Próximos</span><select name="windowDays"><option value="30">30 días</option><option value="60">60 días</option><option value="90" selected>90 días</option></select></label>
+          <label class="flight-field"><span>Estancia mínima</span><select name="minNights">${Array.from({length:14},(_,index)=>`<option value="${index+1}" ${index===2?'selected':''}>${index+1} noches</option>`).join('')}</select></label>
+          <label class="flight-field"><span>Estancia máxima</span><select name="maxNights">${Array.from({length:30},(_,index)=>`<option value="${index+1}" ${index===6?'selected':''}>${index+1} noches</option>`).join('')}</select></label>
+          <button class="flight-submit" type="submit">Explorar ofertas →</button>
+        </div>
+      </form>
+      <p class="flight-iata-help">Esta búsqueda no pide destino: muestra las ofertas flexibles que el proveedor tenga disponibles desde tu aeropuerto.</p>
+      <div class="flight-explore-output" aria-live="polite"></div>
+    </section>
   </section>`;
 
-  const form=root.querySelector('.flight-form'),output=root.querySelector('.flight-output');
+  const form=root.querySelector('.flight-form'),output=root.querySelector('.flight-output'),exploreForm=root.querySelector('.flight-explore-form'),exploreOutput=root.querySelector('.flight-explore-output');
   let airports=[];
   const airportsReady=loadAirportOptions(root.querySelector('#hotelioAirportCodes'),options.airportsUrl||defaultAirportDataUrl()).then(loaded=>{airports=loaded});
   const tripType=form.elements.tripType,returnField=root.querySelector('.flight-return');
@@ -238,7 +287,7 @@ export function mountFlightSearch(container,options={}){
     form.elements.origin.value=form.elements.destination.value;
     form.elements.destination.value=origin;
   };
-  let controller=null;
+  let controller=null,exploreController=null;
   const submit=async event=>{
     event.preventDefault();
     await airportsReady;
@@ -262,13 +311,36 @@ export function mountFlightSearch(container,options={}){
     }
   };
 
+  const explore=async event=>{
+    event.preventDefault();
+    await airportsReady;
+    const data=new FormData(exploreForm),origin=resolveAirportCode(data.get('origin'),airports),windowDays=Number(data.get('windowDays')),minNights=Number(data.get('minNights')),maxNights=Number(data.get('maxNights'));
+    if(!/^[A-Z]{3}$/.test(origin)){exploreOutput.innerHTML='<div class="flight-error">Escribe una ciudad o aeropuerto y elige una sugerencia, o introduce su código IATA.</div>';return}
+    if(minNights<1||maxNights>30||minNights>maxNights){exploreOutput.innerHTML='<div class="flight-error">La estancia máxima debe ser igual o mayor que la mínima.</div>';return}
+    showResolvedAirport(exploreForm.elements.origin,origin);
+    exploreController?.abort();
+    const requestController=new AbortController();exploreController=requestController;
+    const button=exploreForm.querySelector('.flight-submit');button.disabled=true;button.textContent='Explorando…';
+    exploreOutput.innerHTML='<div class="flight-loading"><i></i><i></i><i></i><span>Buscando destinos y fechas económicas…</span></div>';
+    const startDate=localIso(addDays(new Date(),1)),endDate=localIso(addDays(new Date(),windowDays));
+    try{
+      const body=await searchFlightDeals({origin,startDate,endDate,minNights,maxNights},{endpoint:options.dealsEndpoint||defaultFlightDealsEndpoint(),signal:requestController.signal});
+      renderFlightDeals(exploreOutput,body);
+    }catch(error){
+      if(error.name!=='AbortError')exploreOutput.innerHTML=`<div class="flight-error"><strong>No se pudieron explorar destinos.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`;
+    }finally{
+      if(exploreController===requestController){exploreController=null;button.disabled=false;button.textContent='Explorar ofertas →'}
+    }
+  };
+
   tripType.addEventListener('change',syncTripType);
   form.elements.departureDate.addEventListener('change',syncReturnMinimum);
   root.querySelector('.flight-swap').addEventListener('click',swap);
   form.addEventListener('submit',submit);
+  exploreForm.addEventListener('submit',explore);
   syncTripType();syncReturnMinimum();
 
-  return {destroy(){controller?.abort();root.replaceChildren()},form};
+  return {destroy(){controller?.abort();exploreController?.abort();root.replaceChildren()},form};
 }
 
 export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchFlights,showResolvedAirport,validateFlightQuery};
