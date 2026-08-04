@@ -16,6 +16,12 @@ return array(
         'monthly_limit' => 120,
         'per_ip_hourly_limit' => 8
     ),
+    'alerts' => array(
+        'enabled' => true,
+        'cron_secret' => 'GENERA_UN_SECRETO_LARGO_Y_ALEATORIO',
+        'max_checks_per_run' => 2
+    ),
+    'mail' => array('from' => 'no-reply@alufi.es'),
     'providers' => array(
         'stay22' => array('enabled' => true, 'aid' => 'hotelio'),
         'serpapi' => array('enabled' => false, 'api_key' => '')

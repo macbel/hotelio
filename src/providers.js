@@ -1,7 +1,7 @@
 function apiEndpoint(file, localPath) {
   const native=Boolean(globalThis.Capacitor?.isNativePlatform?.());
   const local=!native&&['localhost','127.0.0.1'].includes(location.hostname);
-  if(native)return `https://www.alufi.es/hotelio/api/${file}`;
+  if(native)return `https://www.alufi.es/vuelotel/api/${file}`;
   if(local)return localPath;
   return new URL(`./api/${file}`,location.href).href;
 }

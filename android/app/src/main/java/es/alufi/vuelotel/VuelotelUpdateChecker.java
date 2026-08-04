@@ -1,4 +1,4 @@
-package es.alufi.hotelio;
+package es.alufi.vuelotel;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -24,12 +24,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
 
-/** Checks the signed Hotelio APK release manifest when the native app opens. */
-final class HotelioUpdateChecker {
-    private static final String MANIFEST_URL = "https://www.alufi.es/hotelio/app-update.json";
+/** Checks the signed Vuelotel APK release manifest when the native app opens. */
+final class VuelotelUpdateChecker {
+    private static final String MANIFEST_URL = "https://www.alufi.es/vuelotel/app-update.json";
     private static final String ALLOWED_HOST = "www.alufi.es";
 
-    private HotelioUpdateChecker() {}
+    private VuelotelUpdateChecker() {}
 
     static void check(Activity activity) {
         new Thread(() -> {
@@ -39,7 +39,7 @@ final class HotelioUpdateChecker {
                     activity.runOnUiThread(() -> showPrompt(activity, release));
                 }
             } catch (Exception ignored) {
-                // An update check must never prevent Hotelio from opening.
+                // An update check must never prevent Vuelotel from opening.
             }
         }).start();
     }
@@ -73,7 +73,7 @@ final class HotelioUpdateChecker {
 
     private static void validateRelease(int versionCode, String apkUrl, String checksum) throws Exception {
         URL url = new URL(apkUrl);
-        if (versionCode < 1 || !"https".equals(url.getProtocol()) || !ALLOWED_HOST.equalsIgnoreCase(url.getHost()) || !url.getPath().startsWith("/hotelio/downloads/") || !checksum.matches("[a-f0-9]{64}")) {
+        if (versionCode < 1 || !"https".equals(url.getProtocol()) || !ALLOWED_HOST.equalsIgnoreCase(url.getHost()) || !url.getPath().startsWith("/vuelotel/downloads/") || !checksum.matches("[a-f0-9]{64}")) {
             throw new IllegalArgumentException("Invalid update manifest");
         }
     }
@@ -81,7 +81,7 @@ final class HotelioUpdateChecker {
     private static void showPrompt(Activity activity, Release release) {
         if (activity.isFinishing()) return;
         new AlertDialog.Builder(activity)
-            .setTitle("Actualización de Hotelio disponible")
+            .setTitle("Actualización de Vuelotel disponible")
             .setMessage("Versión " + release.versionName + "\n\n" + release.notes + "\n\nSe descargará el APK y Android pedirá tu confirmación antes de instalarlo.")
             .setPositiveButton("Descargar", (dialog, which) -> download(activity, release))
             .setNegativeButton("Más tarde", null)
@@ -89,13 +89,13 @@ final class HotelioUpdateChecker {
     }
 
     private static void download(Activity activity, Release release) {
-        String name = "hotelio-update-" + release.versionCode + ".apk";
+        String name = "vuelotel-update-" + release.versionCode + ".apk";
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(release.apkUrl));
-        request.setTitle("Actualizando Hotelio");
+        request.setTitle("Actualizando Vuelotel");
         request.setDescription("Descargando versión " + release.versionName);
         request.setMimeType("application/vnd.android.package-archive");
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-        request.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "Hotelio/" + name);
+        request.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "Vuelotel/" + name);
         DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
         long downloadId = manager.enqueue(request);
         BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -106,7 +106,7 @@ final class HotelioUpdateChecker {
                     activity.runOnUiThread(() -> showMessage(activity, "No se pudo descargar la actualización."));
                     return;
                 }
-                File apk = new File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "Hotelio/" + name);
+                File apk = new File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "Vuelotel/" + name);
                 new Thread(() -> {
                     boolean verified = apk.isFile() && checksumMatches(apk, release.sha256);
                     activity.runOnUiThread(() -> {

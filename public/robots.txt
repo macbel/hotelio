@@ -1,2 +1,3 @@
 User-agent: *
-Disallow: /hotelio/admin/
+Disallow: /vuelotel/admin/
+Disallow: /vuelotel/api/

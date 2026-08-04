@@ -1,6 +1,6 @@
 {
-  "appId": "es.alufi.hotelio",
-  "appName": "Hotelio",
+  "appId": "es.alufi.vuelotel",
+  "appName": "Vuelotel",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

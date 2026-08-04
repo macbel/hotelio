@@ -1,0 +1,3 @@
+[hidden]{display:none!important}
+.admin-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0}.admin-metrics span{background:#fff;border-radius:13px;padding:12px;font-size:11px;color:var(--muted)}.admin-metrics strong{display:block;font:700 20px 'Fraunces';color:var(--ink)}
+.admin-provider-link{display:block;color:var(--coral);font-weight:700;margin:-5px 0 18px}

@@ -1,6 +1,6 @@
-# Hotelio
+# Vuelotel
 
-MVP móvil/PWA para comparar alojamientos y consultar vuelos según destino, fechas, ocupantes y filtros opcionales.
+Aplicación web/PWA y Android para comparar alojamientos, vuelos y viajes combinados. Incluye cuentas, favoritos, búsquedas guardadas, alertas de precio y administración de usuarios.
 
 ## Ejecutar
 
@@ -14,9 +14,9 @@ El servidor se inicia con `--use-system-ca` para respetar el almacén de certifi
 
 ## Proveedores centralizados
 
-Las credenciales se guardan en `.hotelio-config.php`, fuera de la carpeta pública `/hotelio`. Este archivo está ignorado por Git y nunca se entrega al navegador ni se incluye en el APK.
+Las credenciales se guardan en `.hotelio-config.php`, fuera de la carpeta pública `/vuelotel`. Este archivo está ignorado por Git y nunca se entrega al navegador ni se incluye en el APK. Consulta [la guía de migración](deployment/MIGRACION-VUELOTEL.md) antes de renombrar la carpeta del servidor.
 
-El menú público de proveedores se ha eliminado. La administración está disponible únicamente en `/hotelio/admin/`, protegida con contraseña. Desde allí se puede activar Stay22, guardar o sustituir la API key de SerpApi y limitar el consumo del buscador de vuelos; la configuración se aplica después a todos los usuarios de la web y del APK.
+La configuración de proveedores está disponible en `/vuelotel/admin/`, protegida con contraseña. La administración de usuarios, búsquedas y alertas se abre desde la cuenta administradora dentro de Vuelotel.
 
 El panel permite cambiar la contraseña introduciendo primero la actual. Si se olvida, envía al correo privado configurado un enlace de un solo uso que caduca en una hora. Hotelio nunca envía ni recupera la contraseña existente.
 

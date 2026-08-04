@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Hotelio</string>
-    <string name="title_activity_main">Hotelio</string>
-    <string name="package_name">es.alufi.hotelio</string>
-    <string name="custom_url_scheme">es.alufi.hotelio</string>
+    <string name="app_name">Vuelotel</string>
+    <string name="title_activity_main">Vuelotel</string>
+    <string name="package_name">es.alufi.vuelotel</string>
+    <string name="custom_url_scheme">es.alufi.vuelotel</string>
 </resources>

@@ -1,4 +1,4 @@
-const FLIGHT_PRICE_NOTICE='Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Hotelio no gestiona pagos ni reservas.';
+const FLIGHT_PRICE_NOTICE='Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Vuelotel no gestiona pagos ni reservas.';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
 
@@ -15,8 +15,8 @@ function addDays(date,days){
 
 function defaultFlightEndpoint(){
   const native=Boolean(globalThis.Capacitor?.isNativePlatform?.());
-  if(native)return 'https://www.alufi.es/hotelio/api/flights.php';
-  if(['localhost','127.0.0.1'].includes(location.hostname))return 'https://www.alufi.es/hotelio/api/flights.php';
+  if(native)return 'https://www.alufi.es/vuelotel/api/flights.php';
+  if(['localhost','127.0.0.1'].includes(location.hostname))return 'https://www.alufi.es/vuelotel/api/flights.php';
   return new URL('./api/flights.php',location.href).href;
 }
 
@@ -190,7 +190,7 @@ export function mountFlightSearch(container,options={}){
   const today=new Date(),departure=addDays(today,14),returnDate=addDays(today,21);
   const defaults={origin:'MAD',destination:'',...options.defaults};
   root.innerHTML=`<section class="flight-search" aria-labelledby="flightSearchTitle">
-    <div class="flight-heading"><div><span class="eyebrow">Vuelos</span><h2 id="flightSearchTitle">Busca tu vuelo</h2><p>Compara opciones sin reservar ni pagar dentro de Hotelio.</p></div><span class="flight-provider">Google Flights</span></div>
+    <div class="flight-heading"><div><span class="eyebrow">Vuelos</span><h2 id="flightSearchTitle">Busca tu vuelo</h2><p>Compara opciones sin reservar ni pagar dentro de Vuelotel.</p></div><span class="flight-provider">Google Flights</span></div>
     <form class="flight-form" novalidate>
       <div class="flight-grid flight-grid-main">
         <label class="flight-field"><span>Viaje</span><select name="tripType"><option value="roundtrip">Ida y vuelta</option><option value="oneway">Solo ida</option></select></label>
@@ -253,6 +253,8 @@ export function mountFlightSearch(container,options={}){
     try{
       const body=await searchFlights(query,{endpoint:options.endpoint||defaultFlightEndpoint(),signal:requestController.signal});
       renderFlightResponse(output,body,query);
+      const cheapest=(body.results||[]).filter(item=>Number(item.price)>0).sort((a,b)=>a.price-b.price)[0];
+      window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'flight',label:`${query.origin} → ${query.destination}`,query,price:cheapest?.price??null,currency:cheapest?.currency||'EUR'}}));
     }catch(error){
       if(error.name!=='AbortError')output.innerHTML=`<div class="flight-error"><strong>No se pudo completar la búsqueda.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`;
     }finally{

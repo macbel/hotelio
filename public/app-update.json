@@ -1,7 +1,7 @@
 {
-  "versionCode": 6,
-  "versionName": "1.2.2",
-  "apkUrl": "https://www.alufi.es/hotelio/downloads/hotelio-1.2.2.apk",
-  "sha256": "923f6e535924dfc4f0d4338bef10178847019111986c75997255344fe2ac5a8f",
-  "releaseNotes": "Mejora el formulario de vuelos en móvil, añade el flujo de actualización y mantiene la opción de solo ida."
+  "versionCode": 7,
+  "versionName": "2.0.0",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/vuelotel-2.0.0.apk",
+  "sha256": "15a4a6dc83b09a6079c677e03846c7d477a8724a3d1c57bacad939280fe0cebb",
+  "releaseNotes": "Estrena Vuelotel con hotel, vuelo y búsqueda combinada, cuentas de usuario, favoritos, búsquedas guardadas, alertas de precio, maletas y fechas flexibles."
 }

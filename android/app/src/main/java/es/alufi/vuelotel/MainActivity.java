@@ -1,4 +1,4 @@
-package es.alufi.hotelio;
+package es.alufi.vuelotel;
 
 import android.os.Bundle;
 
@@ -8,6 +8,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        HotelioUpdateChecker.check(this);
+        VuelotelUpdateChecker.check(this);
     }
 }

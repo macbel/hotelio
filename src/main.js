@@ -1,6 +1,7 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
 import {mountFlightSearch} from './flights.js?v=1.2.2';
 import {mountCombinedSearch} from './combined.js?v=1.2.2';
+import {mountAccount} from './account.js?v=2.0.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -20,7 +21,7 @@ const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 5);
 
 document.querySelector('#app').innerHTML = `
   <main class="shell">
-    <nav class="topbar"><div class="brand"><span class="brand-mark">H</span> Hotelio</div><div class="nav-actions"><div class="travel-switch" aria-label="Tipo de búsqueda"><button class="travel-switch-btn is-active" type="button" data-travel-view="hotels">⌂ Alojamientos</button><button class="travel-switch-btn" type="button" data-travel-view="flights">✈ Vuelos</button><button class="travel-switch-btn" type="button" data-travel-view="combined">✈+ Hotel + vuelo</button></div><button class="ghost saved-nav" id="savedBtn">♡ Guardados <span id="savedCount">0</span></button></div></nav>
+    <nav class="topbar"><div class="brand"><span class="brand-mark">V</span> Vuelotel</div><div class="nav-actions"><div class="travel-switch" aria-label="Tipo de búsqueda"><button class="travel-switch-btn is-active" type="button" data-travel-view="hotels">⌂ Alojamientos</button><button class="travel-switch-btn" type="button" data-travel-view="flights">✈ Vuelos</button><button class="travel-switch-btn" type="button" data-travel-view="combined">✈+ Hotel + vuelo</button></div><button class="ghost saved-nav" id="savedBtn">♡ Favoritos <span id="savedCount">0</span></button><button class="ghost" id="adminBtn" hidden>Administración</button><button class="ghost" id="accountBtn">◉ Acceder</button></div></nav>
     <section id="hotelView" class="travel-view">
       <section class="hero"><div><div class="eyebrow">Tu viaje, al precio justo</div><h1>Duerme bien.<br>Ahorra más.</h1><p>Compara en un solo lugar los alojamientos de tus proveedores favoritos y encuentra la opción que encaja contigo.</p></div><div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="hotel"><div class="windows"><i></i><i></i><i></i><i></i></div></div></div></section>
       <form class="search-card" id="searchForm">
@@ -45,6 +46,7 @@ document.querySelector('#app').innerHTML = `
 
 mountFlightSearch('#flightView');
 mountCombinedSearch('#combinedView',{providersPromise:providerConfigurationPromise});
+mountAccount();
 const setTravelView=view=>{
   const flights=view==='flights';
   const combined=view==='combined';
@@ -147,7 +149,7 @@ function renderDirectSearches(query) {
   const people=`${query.adults} ${query.adults===1?'adulto':'adultos'}${query.children?` · ${query.children} ${query.children===1?'niño':'niños'} (${query.childrenAges.join(', ')} años)`:''}`;
   const preferences=`${accommodationLabels[query.accommodationType]} · ${boardLabels[query.board]} · ${priceLabel(query)}`;
   const statusLabels={applied:'Aplicado',approximate:'Aproximado',confirm:'Confirmar en la web'};
-  return `<section class="direct-search"><div class="results-head"><div><span class="eyebrow">Búsqueda real sin cuenta</span><h2>Consultar en otras webs</h2><p>${esc(query.destination)} · ${query.nights} noches · ${esc(people)}</p><p class="search-preferences">${esc(preferences)}</p></div></div><div class="filter-legend"><span class="filter-badge applied">Aplicado</span><span class="filter-badge approximate">Aproximado</span><span class="filter-badge confirm">Confirmar en la web</span></div><div class="portal-grid">${directSearches(query).map(p=>`<a class="portal ${p.status==='confirm'?'portal-manual':''}" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="portal-logo">${esc(p.name.slice(0,1))}</span><span><strong>${esc(p.name)} <i class="filter-badge ${esc(p.status)}">${esc(statusLabels[p.status])}</i></strong><small>${esc(p.note)}</small></span><b>↗</b></a>`).join('')}</div><p class="direct-note">Solo Expedia recibe destino, fechas y ocupantes mediante un deeplink documentado. Ninguna de estas webs permite garantizar por URL el precio, el tipo o el régimen; por eso Hotelio ya no envía parámetros internos o inventados.</p></section>`;
+  return `<section class="direct-search"><div class="results-head"><div><span class="eyebrow">Búsqueda real sin cuenta</span><h2>Consultar en otras webs</h2><p>${esc(query.destination)} · ${query.nights} noches · ${esc(people)}</p><p class="search-preferences">${esc(preferences)}</p></div></div><div class="filter-legend"><span class="filter-badge applied">Aplicado</span><span class="filter-badge approximate">Aproximado</span><span class="filter-badge confirm">Confirmar en la web</span></div><div class="portal-grid">${directSearches(query).map(p=>`<a class="portal ${p.status==='confirm'?'portal-manual':''}" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="portal-logo">${esc(p.name.slice(0,1))}</span><span><strong>${esc(p.name)} <i class="filter-badge ${esc(p.status)}">${esc(statusLabels[p.status])}</i></strong><small>${esc(p.note)}</small></span><b>↗</b></a>`).join('')}</div><p class="direct-note">Solo Expedia recibe destino, fechas y ocupantes mediante un deeplink documentado. Ninguna de estas webs permite garantizar por URL el precio, el tipo o el régimen; por eso Vuelotel no envía parámetros internos o inventados.</p></section>`;
 }
 
 function renderChildAges() {
@@ -182,6 +184,7 @@ document.querySelector('#searchForm').addEventListener('submit', async e => {
   const settled=await Promise.allSettled(jobs.map(job=>job.run()));
   results=settled.flatMap((r,i)=>{if(r.status==='rejected'){errors.push(r.reason?.message||jobs[i]?.name);return []}if(r.value.notice)notices.push(r.value.notice);return r.value.results}).filter(r=>withinPrice(Number(r.nightlyPrice),query)).sort((a,b)=>a.totalPrice-b.totalPrice);
   renderResults(query); btn.disabled=false; btn.textContent='Buscar el mejor precio →';
+  window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'hotel',label:`Hoteles en ${query.destination}`,query,price:results[0]?.totalPrice??null,currency:results[0]?.currency||'EUR'}}));
 });
 
 document.querySelector('#results').addEventListener('click',event=>{
@@ -190,6 +193,7 @@ document.querySelector('#results').addEventListener('click',event=>{
   const hotel=results[Number(button.dataset.saveResult)];
   if(!hotel)return;
   saveHotelOffer(hotel,currentQuery);
+  window.dispatchEvent(new CustomEvent('vuelotel:favorite',{detail:{type:'hotel',label:hotel.name,fingerprint:hotelIdentity(hotel,currentQuery),payload:{hotel,search:currentQuery}}}));
   button.classList.add('is-saved');button.textContent='♥ Guardado';
 });
 

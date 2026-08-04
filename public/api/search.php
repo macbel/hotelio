@@ -88,7 +88,7 @@ function stay22_filter_status($accommodationType, $board, $children) {
 
 function stay22_filter_notice($accommodationType, $board, $children) {
     $notices = array();
-    if ($accommodationType !== 'any') $notices[] = 'Stay22 no recibe un filtro de tipo: Hotelio aproxima el resultado usando el tipo devuelto por el proveedor.';
+    if ($accommodationType !== 'any') $notices[] = 'Stay22 no recibe un filtro de tipo: Vuelotel aproxima el resultado usando el tipo devuelto por el proveedor.';
     if ($board !== 'any') $notices[] = 'Stay22 no permite filtrar el régimen con fiabilidad: debe confirmarse en el proveedor.';
     if ($children > 0) $notices[] = 'Stay22 recibe el número de niños, pero no sus edades: deben confirmarse en el proveedor.';
     return implode(' ', $notices);

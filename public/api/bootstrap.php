@@ -16,6 +16,8 @@ function hotelio_default_config() {
             'monthly_limit' => 120,
             'per_ip_hourly_limit' => 8
         ),
+        'alerts' => array('enabled' => true, 'cron_secret' => '', 'max_checks_per_run' => 2),
+        'mail' => array('from' => 'no-reply@alufi.es'),
         'providers' => array(
             'stay22' => array('enabled' => true, 'aid' => 'hotelio'),
             'serpapi' => array('enabled' => false, 'api_key' => '')
@@ -46,6 +48,8 @@ function hotelio_config() {
             if (isset($stored['flights']) && is_array($stored['flights'])) {
                 $config['flights'] = array_merge($config['flights'], $stored['flights']);
             }
+            if (isset($stored['alerts']) && is_array($stored['alerts'])) $config['alerts'] = array_merge($config['alerts'], $stored['alerts']);
+            if (isset($stored['mail']) && is_array($stored['mail'])) $config['mail'] = array_merge($config['mail'], $stored['mail']);
             foreach (array('stay22', 'serpapi') as $provider) {
                 if (isset($stored['providers'][$provider]) && is_array($stored['providers'][$provider])) {
                     $config['providers'][$provider] = array_merge($config['providers'][$provider], $stored['providers'][$provider]);

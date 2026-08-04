@@ -1,6 +1,6 @@
 {
-  "name": "Hotelio — Hoteles y vuelos",
-  "short_name": "Hotelio",
+  "name": "Vuelotel — Hoteles y vuelos",
+  "short_name": "Vuelotel",
   "description": "Compara alojamientos y consulta vuelos según tus preferencias.",
   "start_url": "./",
   "display": "standalone",
