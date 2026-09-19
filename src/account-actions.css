@@ -1,0 +1,2 @@
+.account-item-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+@media(max-width:520px){.account-item-actions{justify-content:flex-start;grid-column:2/-1}}

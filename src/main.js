@@ -1,7 +1,7 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
 import {mountFlightSearch} from './flights.js?v=2.0.2';
 import {mountCombinedSearch} from './combined.js?v=2.0.2';
-import {mountAccount} from './account.js?v=2.0.0';
+import {mountAccount} from './account.js?v=2.0.2';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -60,6 +60,30 @@ const setTravelView=view=>{
 };
 document.querySelectorAll('[data-travel-view]').forEach(button=>button.addEventListener('click',()=>setTravelView(button.dataset.travelView)));
 setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'?'combined':'hotels');
+
+const setField=(form,name,value)=>{if(form?.elements?.[name]&&value!==undefined&&value!==null)form.elements[name].value=String(value)};
+const openSavedSearch=event=>{
+  const saved=event.detail||{},filters=saved.filters||{};
+  if(saved.type==='flight'){
+    setTravelView('flights');
+    const form=document.querySelector('#flightView .flight-form');
+    ['tripType','origin','destination','departureDate','returnDate','adults','children','infants','travelClass','stops','carryOnBags','maxPrice'].forEach(name=>setField(form,name,filters[name]));
+    form?.elements?.tripType.dispatchEvent(new Event('change',{bubbles:true}));form?.elements?.departureDate.dispatchEvent(new Event('change',{bubbles:true}));
+    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  if(saved.type==='combined'){
+    setTravelView('combined');
+    const form=document.querySelector('#combinedView .combo-form'),flight=filters.flight||filters,hotel=filters.hotel||{};
+    setField(form,'origin',flight.origin);setField(form,'destination',flight.destination);setField(form,'departureDate',flight.departureDate||hotel.checkIn);setField(form,'returnDate',flight.returnDate||hotel.checkOut);setField(form,'adults',flight.adults||hotel.adults);setField(form,'children',flight.children||hotel.children);setField(form,'travelClass',flight.travelClass);setField(form,'stops',flight.stops);setField(form,'carryOnBags',flight.carryOnBags);setField(form,'checkedBags',filters.checkedBags);
+    form?.elements?.departureDate.dispatchEvent(new Event('change',{bubbles:true}));form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  setTravelView('hotels');
+  const destination=document.querySelector('#destination'),checkIn=document.querySelector('#checkIn'),checkOut=document.querySelector('#checkOut'),adults=document.querySelector('#adults'),children=document.querySelector('#children');
+  if(destination&&filters.destination!==undefined)destination.value=filters.destination;if(checkIn&&filters.checkIn!==undefined)checkIn.value=filters.checkIn;if(checkOut&&filters.checkOut!==undefined)checkOut.value=filters.checkOut;if(adults&&filters.adults!==undefined)adults.value=String(filters.adults);
+  if(children){children.value=String((filters.childrenAges||[]).length||filters.children||0);children.dispatchEvent(new Event('change',{bubbles:true}));document.querySelectorAll('.child-age').forEach((field,index)=>{if(filters.childrenAges?.[index]!==undefined)field.value=String(filters.childrenAges[index])})}
+  const min=document.querySelector('#minPrice'),max=document.querySelector('#maxPrice'),type=document.querySelector('#accommodationType'),board=document.querySelector('#board');if(min)min.value=filters.minPrice??'';if(max)max.value=filters.maxPrice??'';if(type&&filters.accommodationType!==undefined)type.value=filters.accommodationType;if(board&&filters.board!==undefined)board.value=filters.board;document.querySelector('#searchForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+};
+window.addEventListener('vuelotel:open-saved-search',openSavedSearch);
 
 const money = (value, currency='EUR') => new Intl.NumberFormat('es-ES',{style:'currency',currency,maximumFractionDigits:0}).format(value);
 const nightsBetween = (a,b) => Math.max(1, Math.round((new Date(b)-new Date(a))/86400000));
@@ -282,4 +306,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=11'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=12'));

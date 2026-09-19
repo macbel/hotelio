@@ -50,7 +50,7 @@ Los enlaces externos ya no incluyen parámetros internos o inventados. Solo Expe
 
 ## Buscador de vuelos
 
-En **Guardados**, pulsa el nombre del alojamiento o **Consultar** para abrir sus fechas, ocupantes, preferencias, servicios y todas las ofertas guardadas. Cada oferta conserva el precio y la fecha de guardado y permite abrir el enlace del proveedor. La consulta no ejecuta otra búsqueda ni actualiza los precios históricos.
+En **Favoritos**, pulsa el nombre del alojamiento o **Consultar** para abrir sus fechas, ocupantes, preferencias, servicios y todas las ofertas guardadas. En una cuenta, abre **Acceder → Búsquedas** y pulsa **Consultar** para cargar de nuevo una búsqueda de alojamientos, vuelos o viaje combinado en su formulario correspondiente. Cada oferta conserva el precio y la fecha de guardado y permite abrir el enlace del proveedor; cargar una búsqueda no la ejecuta automáticamente.
 
 Los campos de origen y destino reconocen ciudad, nombre de aeropuerto y código IATA, con sugerencias filtradas y nombres habituales en español (por ejemplo, Sevilla, Roma, Londres o París). Si una ciudad tiene varios aeropuertos, puedes elegir una sugerencia concreta; al enviar solo la ciudad se muestra el aeropuerto elegido en el campo. Los nombres parciales ambiguos requieren seleccionar una sugerencia.
 
