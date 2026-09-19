@@ -53,7 +53,7 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     <div class="combo-output" aria-live="polite"></div>
   </section>`;
   const form=root.querySelector('.combo-form'),output=root.querySelector('.combo-output');
-  let airports=[],controller=null,flightOptions=[],hotelOptions=[],flightUrl='';
+  let airports=[],controller=null,flightOptions=[],hotelOptions=[],flightUrl='',combinedContext=null;
   const airportList=root.querySelector('#comboAirports'),airportInputs=[form.elements.origin,form.elements.destination];
   const updateSuggestions=input=>{airportList.innerHTML=searchAirports(input.value,airports).map(airport=>`<option value="${esc(`${[airport.city,airport.name,airport.country].filter(Boolean).join(' · ')} (${airport.iata})`)}"></option>`).join('')};
   airportInputs.forEach(input=>input.addEventListener('input',()=>updateSuggestions(input)));
@@ -65,6 +65,12 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     const total=Number(flight.price)+Number(hotel.totalPrice);
     const message=['✈️🏨 Vuelotel · Hotel + vuelo',`${form.elements.origin.value} → ${form.elements.destination.value}`,`${form.elements.departureDate.value} → ${form.elements.returnDate.value}`,`Vuelo: ${money(flight.price,flight.currency)}`,`Hotel: ${hotel.name} · ${money(hotel.totalPrice,hotel.currency)}`,`Total estimado: ${money(total,flight.currency||hotel.currency)}`,flightUrl,hotel.url||''].filter(Boolean).join('\n');
     summary.innerHTML=`<div><small>Total estimado</small><strong>${esc(money(total,flight.currency||hotel.currency))}</strong><span>Vuelo ${esc(money(flight.price,flight.currency))} + alojamiento ${esc(money(hotel.totalPrice,hotel.currency))}</span></div><div class="combo-actions"><a href="${esc(flightUrl)}" target="_blank" rel="noopener noreferrer">Confirmar vuelo ↗</a><a href="${esc(hotel.url||'#')}" target="_blank" rel="noopener noreferrer">Confirmar hotel ↗</a><a class="share-whatsapp" href="${esc(whatsappUrl(message))}" target="_blank" rel="noopener noreferrer">Compartir por WhatsApp</a></div>`;
+    if(!combinedContext)return;
+    const airline=Array.isArray(flight.airlines)?flight.airlines.filter(Boolean).join(', '):'';
+    const savedFlight={airlines:airline,departure:flight.departure||{},arrival:flight.arrival||{},price:Number(flight.price)||0,currency:flight.currency||'EUR',stops:Number(flight.stops)||0,durationMinutes:Number(flight.durationMinutes)||0,searchUrl:flightUrl};
+    const savedHotel={name:hotel.name||'Alojamiento',location:hotel.location||combinedContext.hotel.destination,totalPrice:Number(hotel.totalPrice)||0,nightlyPrice:Number(hotel.nightlyPrice)||0,currency:hotel.currency||'EUR',rating:hotel.rating??null,provider:hotel.provider||'',url:hotel.url||''};
+    const label=`${combinedContext.flight.origin} → ${combinedContext.hotel.destination} · ${savedHotel.name}`;
+    window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'combined',label,query:{...combinedContext,selection:{flight:savedFlight,hotel:savedHotel,total,currency:flight.currency||hotel.currency||'EUR'}},price:total,currency:flight.currency||hotel.currency||'EUR'}}));
   };
   form.elements.departureDate.addEventListener('change',()=>{
     const minimum=addDays(new Date(`${form.elements.departureDate.value}T12:00:00`),1);form.elements.returnDate.min=iso(minimum);
@@ -80,6 +86,7 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     showResolvedAirport(form.elements.destination,destination);
     const destinationText=destinationName(data.get('destination'),destination,airports),nights=nightsBetween(departureDate,returnDate);
     const hotelQuery={destination:destinationText,checkIn:departureDate,checkOut:returnDate,adults,children,childrenAges:Array(children).fill(8),guests:adults+children,rooms:1,minPrice:null,maxPrice:null,accommodationType:'any',board:'any',currency:'EUR',nights};
+    combinedContext={flight:flightQuery,hotel:hotelQuery,checkedBags:Number(data.get('checkedBags'))};
     controller?.abort();controller=new AbortController();const activeController=controller,button=form.querySelector('.flight-submit');button.disabled=true;button.textContent='Buscando…';
     output.innerHTML='<div class="flight-loading"><i></i><i></i><i></i><span>Consultando vuelos y alojamientos…</span></div>';
     try{
@@ -92,8 +99,6 @@ export function mountCombinedSearch(container,{providersPromise}={}){
       if(!flightOptions.length||!hotelOptions.length)throw new Error(!flightOptions.length?'No se recibieron vuelos con precio para combinar.':'No se recibieron alojamientos con precio para combinar.');
       output.innerHTML=`<div class="combo-results"><section><div class="combo-title"><span>1</span><div><h3>Elige un vuelo</h3><p>Opciones iniciales; la vuelta y el precio final se confirman en Google Flights.</p></div></div><div class="combo-options">${flightOptions.map(flightLabel).join('')}</div></section><section><div class="combo-title"><span>2</span><div><h3>Elige un alojamiento</h3><p>${esc(destinationText)} · ${nights} noches</p></div></div><div class="combo-options">${hotelOptions.map(hotelLabel).join('')}</div></section></div><aside class="combo-summary"></aside>${hotelErrors.length?`<p class="combo-warning">Algunos proveedores no respondieron: ${esc(hotelErrors.join(' · '))}</p>`:''}<p class="flight-legal">${esc(FLIGHT_PRICE_NOTICE)} El total es una suma orientativa; Vuelotel no vende un paquete combinado ni garantiza disponibilidad simultánea. Las maletas facturadas se guardan como preferencia y deben confirmarse con la tarifa final.</p>`;
       output.querySelectorAll('[name=comboFlight],[name=comboHotel]').forEach(input=>input.addEventListener('change',updateTotal));updateTotal();
-      const initialTotal=Number(flightOptions[0]?.price)+Number(hotelOptions[0]?.totalPrice);
-      window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'combined',label:`${origin} → ${destinationText} · hotel + vuelo`,query:{flight:flightQuery,hotel:hotelQuery,checkedBags:Number(data.get('checkedBags'))},price:initialTotal,currency:flightOptions[0]?.currency||'EUR'}}));
     }catch(error){if(error.name!=='AbortError')output.innerHTML=`<div class="flight-error"><strong>No se pudo completar la búsqueda combinada.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`}
     finally{if(controller===activeController){controller=null;button.disabled=false;button.textContent='Buscar hotel + vuelo →'}}
   });

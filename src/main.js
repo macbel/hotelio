@@ -1,6 +1,6 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
 import {mountFlightSearch} from './flights.js?v=2.0.2';
-import {mountCombinedSearch} from './combined.js?v=2.0.2';
+import {mountCombinedSearch} from './combined.js?v=2.0.3';
 import {mountAccount} from './account.js?v=2.0.2';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
@@ -75,7 +75,14 @@ const openSavedSearch=event=>{
     setTravelView('combined');
     const form=document.querySelector('#combinedView .combo-form'),flight=filters.flight||filters,hotel=filters.hotel||{};
     setField(form,'origin',flight.origin);setField(form,'destination',flight.destination);setField(form,'departureDate',flight.departureDate||hotel.checkIn);setField(form,'returnDate',flight.returnDate||hotel.checkOut);setField(form,'adults',flight.adults||hotel.adults);setField(form,'children',flight.children||hotel.children);setField(form,'travelClass',flight.travelClass);setField(form,'stops',flight.stops);setField(form,'carryOnBags',flight.carryOnBags);setField(form,'checkedBags',filters.checkedBags);
-    form?.elements?.departureDate.dispatchEvent(new Event('change',{bubbles:true}));form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+    form?.elements?.departureDate.dispatchEvent(new Event('change',{bubbles:true}));
+    const selection=filters.selection,output=document.querySelector('#combinedView .combo-output');
+    if(selection&&output){
+      const flight=selection.flight||{},hotelSelection=selection.hotel||{};
+      const route=[flight.departure?.airport,flight.arrival?.airport].filter(Boolean).join(' → ')||'Vuelo seleccionado';
+      output.innerHTML=`<aside class="flight-info"><strong>Selección guardada</strong><p>${esc(flight.airlines||route)} · ${esc(money(flight.price,flight.currency||selection.currency))}</p><p>${esc(hotelSelection.name||'Alojamiento')} · ${esc(money(hotelSelection.totalPrice,hotelSelection.currency||selection.currency))}</p><p>Total guardado: <strong>${esc(money(selection.total,selection.currency))}</strong>. Consulta de nuevo para confirmar disponibilidad y precio.</p></aside>`;
+    }
+    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   setTravelView('hotels');
   const destination=document.querySelector('#destination'),checkIn=document.querySelector('#checkIn'),checkOut=document.querySelector('#checkOut'),adults=document.querySelector('#adults'),children=document.querySelector('#children');
@@ -306,4 +313,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=12'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=13'));
