@@ -1,7 +1,7 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.0.2';
+import {mountFlightSearch} from './flights.js?v=2.1.0';
 import {mountCombinedSearch} from './combined.js?v=2.0.3';
-import {mountAccount} from './account.js?v=2.0.2';
+import {mountAccount} from './account.js?v=2.1.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -64,6 +64,12 @@ setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'
 const setField=(form,name,value)=>{if(form?.elements?.[name]&&value!==undefined&&value!==null)form.elements[name].value=String(value)};
 const openSavedSearch=event=>{
   const saved=event.detail||{},filters=saved.filters||{};
+  if(saved.type==='destination'){
+    setTravelView('flights');
+    const form=document.querySelector('#flightView .flight-destination-form');
+    ['origin','destination','startDate','endDate','minNights','adults','children','infants','carryOnBags','checkedBags'].forEach(name=>setField(form,name,filters[name]));
+    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
   if(saved.type==='flight'){
     setTravelView('flights');
     const form=document.querySelector('#flightView .flight-form');
@@ -313,4 +319,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=13'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=14'));

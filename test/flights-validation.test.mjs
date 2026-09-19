@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {resolveAirportCode,searchAirports,validateFlightQuery} from '../src/flights.js';
+import {resolveAirportCode,searchAirports,validateDestinationQuery,validateFlightQuery} from '../src/flights.js';
 const catalog=JSON.parse(readFileSync(new URL('../public/data/airports.json',import.meta.url))).airports;
 
 const validQuery={
@@ -27,6 +27,15 @@ test('valida vuelta y ocupación',()=>{
 
 test('permite solo ida sin fecha de regreso',()=>{
   assert.equal(validateFlightQuery({...validQuery,tripType:'oneway',returnDate:''}),'');
+});
+
+test('valida el seguimiento flexible de un destino',()=>{
+  const query={origin:'MAD',destination:'FCO',startDate:'2026-10-01',endDate:'2026-12-15',minNights:7,adults:2,children:1,infants:0,carryOnBags:2,checkedBags:1};
+  assert.equal(validateDestinationQuery(query),'');
+  assert.match(validateDestinationQuery({...query,origin:'Madrid'}),/IATA/);
+  assert.match(validateDestinationQuery({...query,endDate:'2026-09-01'}),/ventana/);
+  assert.match(validateDestinationQuery({...query,checkedBags:4}),/maletas/);
+  assert.match(validateDestinationQuery({...query,infants:3,adults:2}),/adulto/);
 });
 
 test('resuelve ciudad, aeropuerto seleccionado y código IATA',()=>{
