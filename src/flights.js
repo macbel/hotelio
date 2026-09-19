@@ -51,15 +51,11 @@ function defaultAirportDataUrl(){
   return new URL('./data/airports.json',document.baseURI).href;
 }
 
-async function loadAirportOptions(list,url){
+async function loadAirports(url){
   try{
     const response=await fetch(url,{headers:{Accept:'application/json'},cache:'force-cache'});
     const body=await response.json();
     if(!response.ok||!Array.isArray(body.airports))return [];
-    list.innerHTML=body.airports.map(airport=>{
-      const place=[airport.city,airport.name,airport.country].filter(Boolean).join(' · ');
-      return `<option value="${esc(`${place} (${airport.iata})`)}"></option>`;
-    }).join('');
     return body.airports;
   }catch{
     // La búsqueda por código IATA sigue disponible si el catálogo local falla.
@@ -69,6 +65,39 @@ async function loadAirportOptions(list,url){
 
 const normalizedAirportText=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const airportRank=airport=>({large_airport:3,medium_airport:2,small_airport:1}[airport?.type]||0);
+// Nombres de ciudades servidas, incluidos los que difieren del municipio del catálogo.
+const cityAliases={
+  MAD:['Madrid'],BCN:['Barcelona'],SVQ:['Sevilla'],LCG:['A Coruña','La Coruña'],EAS:['San Sebastián','Donostia'],
+  OVD:['Asturias','Oviedo','Gijón'],SDR:['Santander'],PMI:['Palma','Palma de Mallorca'],LPA:['Las Palmas','Gran Canaria'],
+  FCO:['Roma'],CIA:['Roma'],LHR:['Londres'],LGW:['Londres'],STN:['Londres'],LTN:['Londres'],LCY:['Londres'],SEN:['Londres'],
+  CDG:['París'],ORY:['París'],BVA:['París'],BRU:['Bruselas'],CRL:['Bruselas'],
+  VCE:['Venecia'],TSF:['Venecia'],FLR:['Florencia'],MXP:['Milán'],LIN:['Milán'],BGY:['Milán'],
+  NAP:['Nápoles'],TRN:['Turín'],BLQ:['Bolonia'],PRG:['Praga'],MUC:['Múnich'],VIE:['Viena'],
+  LIS:['Lisboa'],OPO:['Oporto'],ATH:['Atenas'],WAW:['Varsovia'],KRK:['Cracovia'],
+  CPH:['Copenhague'],ARN:['Estocolmo'],GVA:['Ginebra'],ZRH:['Zúrich'],BER:['Berlín'],
+  CGN:['Colonia'],FRA:['Fráncfort','Frankfurt'],EDI:['Edimburgo'],DUB:['Dublín'],
+  JFK:['Nueva York'],EWR:['Nueva York'],LGA:['Nueva York'],PEK:['Pekín','Beijing'],PKX:['Pekín','Beijing']
+};
+const airportCities=airport=>[airport.city,String(airport.city||'').replace(/\s*\(.*$/,''),...(cityAliases[airport.iata]||[])].filter(Boolean);
+const airportLabel=airport=>[...new Set([...(cityAliases[airport.iata]||[]),airport.city,airport.name,airport.country].filter(Boolean))].join(' · ')+` (${airport.iata})`;
+
+function airportMatchScore(airport,wanted){
+  if(normalizedAirportText(airport.iata)===wanted)return 5;
+  const cities=airportCities(airport).map(normalizedAirportText);
+  if(cities.includes(wanted))return 4;
+  const name=normalizedAirportText(airport.name);
+  if(name===wanted)return 3;
+  if(cities.some(city=>city.startsWith(wanted)))return 2;
+  return normalizedAirportText(airportLabel(airport)).includes(wanted)?1:0;
+}
+
+function searchAirports(value,airports=[],limit=20){
+  const wanted=normalizedAirportText(value);
+  if(!wanted)return [];
+  return airports.map(airport=>({airport,score:airportMatchScore(airport,wanted)})).filter(item=>item.score)
+    .sort((a,b)=>b.score-a.score||airportRank(b.airport)-airportRank(a.airport)||String(a.airport.iata).localeCompare(String(b.airport.iata)))
+    .slice(0,limit).map(item=>item.airport);
+}
 
 function bestAirport(matches){
   return [...matches].sort((left,right)=>{
@@ -79,15 +108,19 @@ function bestAirport(matches){
 
 function resolveAirportCode(value,airports=[]){
   const text=String(value||'').trim();
-  if(/^[A-Za-z]{3}$/.test(text))return text.toUpperCase();
   const selected=text.match(/\(([A-Za-z]{3})\)\s*$/);
   if(selected)return selected[1].toUpperCase();
   const wanted=normalizedAirportText(text);
   if(!wanted)return '';
-  const exactCity=airports.filter(airport=>normalizedAirportText(airport.city)===wanted);
+  const code=airports.find(airport=>normalizedAirportText(airport.iata)===wanted);
+  if(code)return code.iata.toUpperCase();
+  const exactCity=airports.filter(airport=>airportCities(airport).some(city=>normalizedAirportText(city)===wanted));
   if(exactCity.length)return String(bestAirport(exactCity)?.iata||'').toUpperCase();
   const exactName=airports.filter(airport=>normalizedAirportText(airport.name)===wanted);
   if(exactName.length)return String(bestAirport(exactName)?.iata||'').toUpperCase();
+  if(/^[A-Za-z]{3}$/.test(text))return text.toUpperCase();
+  const matches=searchAirports(text,airports,2);
+  if(matches.length===1)return matches[0].iata.toUpperCase();
   return '';
 }
 
@@ -219,19 +252,21 @@ function renderFlightDeals(output,body){
  * Inserta y activa el MVP de vuelos dentro de un elemento existente.
  * La hoja src/flights.css debe estar enlazada por la página anfitriona.
  */
+let flightSearchInstance=0;
 export function mountFlightSearch(container,options={}){
   const root=typeof container==='string'?document.querySelector(container):container;
   if(!(root instanceof Element))throw new Error('No se encontró el contenedor del buscador de vuelos.');
   const today=new Date(),departure=addDays(today,14),returnDate=addDays(today,21);
   const defaults={origin:'MAD',destination:'',...options.defaults};
+  const instanceId=`hotelioAirports${++flightSearchInstance}`;
   root.innerHTML=`<section class="flight-search" aria-labelledby="flightSearchTitle">
     <div class="flight-heading"><div><span class="eyebrow">Vuelos</span><h2 id="flightSearchTitle">Busca tu vuelo</h2><p>Compara opciones sin reservar ni pagar dentro de Vuelotel.</p></div><span class="flight-provider">Google Flights</span></div>
     <form class="flight-form" novalidate>
       <div class="flight-grid flight-grid-main">
         <label class="flight-field"><span>Viaje</span><select name="tripType"><option value="roundtrip">Ida y vuelta</option><option value="oneway">Solo ida</option></select></label>
-        <label class="flight-field"><span>Origen</span><input name="origin" list="hotelioAirportCodes" required autocomplete="off" placeholder="Madrid o MAD" value="${esc(defaults.origin||'')}"></label>
+        <label class="flight-field"><span>Origen</span><input name="origin" list="${instanceId}Origin" required autocomplete="off" placeholder="Ciudad, aeropuerto o IATA" value="${esc(defaults.origin||'')}"></label>
         <button class="flight-swap" type="button" aria-label="Intercambiar origen y destino">⇄</button>
-        <label class="flight-field"><span>Destino</span><input name="destination" list="hotelioAirportCodes" required autocomplete="off" placeholder="Roma o FCO" value="${esc(defaults.destination||'')}"></label>
+        <label class="flight-field"><span>Destino</span><input name="destination" list="${instanceId}Destination" required autocomplete="off" placeholder="Ciudad, aeropuerto o IATA" value="${esc(defaults.destination||'')}"></label>
         <label class="flight-field"><span>Ida</span><input name="departureDate" type="date" required min="${localIso(today)}" value="${localIso(departure)}"></label>
         <label class="flight-field flight-return"><span>Vuelta</span><input name="returnDate" type="date" required min="${localIso(addDays(departure,1))}" value="${localIso(returnDate)}"></label>
       </div>
@@ -246,7 +281,7 @@ export function mountFlightSearch(container,options={}){
         <button class="flight-submit" type="submit">Buscar vuelos →</button>
       </div>
     </form>
-    <datalist id="hotelioAirportCodes"></datalist>
+    <datalist id="${instanceId}Origin"></datalist><datalist id="${instanceId}Destination"></datalist>
     <p class="flight-iata-help">Escribe una ciudad o un aeropuerto y elige una sugerencia; también puedes usar directamente MAD, BCN, FCO o JFK. Catálogo local de <a href="https://ourairports.com/data/" target="_blank" rel="noopener">OurAirports</a>; no consume búsquedas.</p>
     <p class="flight-legal">${esc(FLIGHT_PRICE_NOTICE)}</p>
     <div class="flight-output" aria-live="polite"></div>
@@ -254,7 +289,7 @@ export function mountFlightSearch(container,options={}){
       <div class="flight-heading"><div><span class="eyebrow">Inspírate</span><h2 id="flightExploreTitle">Explorar destinos</h2><p>Encuentra los vuelos más baratos sin decidir antes el destino ni las fechas exactas.</p></div><span class="flight-provider">Google Flights Deals</span></div>
       <form class="flight-explore-form" novalidate>
         <div class="flight-grid flight-explore-grid">
-          <label class="flight-field"><span>Origen</span><input name="origin" list="hotelioAirportCodes" required autocomplete="off" placeholder="Madrid o MAD" value="${esc(defaults.origin||'')}"></label>
+          <label class="flight-field"><span>Origen</span><input name="origin" list="${instanceId}ExploreOrigin" required autocomplete="off" placeholder="Ciudad, aeropuerto o IATA" value="${esc(defaults.origin||'')}"></label>
           <label class="flight-field"><span>Próximos</span><select name="windowDays"><option value="30">30 días</option><option value="60">60 días</option><option value="90" selected>90 días</option></select></label>
           <label class="flight-field"><span>Estancia mínima</span><select name="minNights">${Array.from({length:14},(_,index)=>`<option value="${index+1}" ${index===2?'selected':''}>${index+1} noches</option>`).join('')}</select></label>
           <label class="flight-field"><span>Estancia máxima</span><select name="maxNights">${Array.from({length:30},(_,index)=>`<option value="${index+1}" ${index===6?'selected':''}>${index+1} noches</option>`).join('')}</select></label>
@@ -263,12 +298,20 @@ export function mountFlightSearch(container,options={}){
       </form>
       <p class="flight-iata-help">Esta búsqueda no pide destino: muestra las ofertas flexibles que el proveedor tenga disponibles desde tu aeropuerto.</p>
       <div class="flight-explore-output" aria-live="polite"></div>
-    </section>
+    </section><datalist id="${instanceId}ExploreOrigin"></datalist>
   </section>`;
 
   const form=root.querySelector('.flight-form'),output=root.querySelector('.flight-output'),exploreForm=root.querySelector('.flight-explore-form'),exploreOutput=root.querySelector('.flight-explore-output');
   let airports=[];
-  const airportsReady=loadAirportOptions(root.querySelector('#hotelioAirportCodes'),options.airportsUrl||defaultAirportDataUrl()).then(loaded=>{airports=loaded});
+  const updateSuggestions=input=>{
+    root.querySelector(`#${input.getAttribute('list')}`).innerHTML=searchAirports(input.value,airports).map(airport=>`<option value="${esc(airportLabel(airport))}"></option>`).join('');
+  };
+  const airportInputs=[form.elements.origin,form.elements.destination,exploreForm.elements.origin];
+  airportInputs.forEach(input=>input.addEventListener('input',()=>updateSuggestions(input)));
+  const airportsReady=loadAirports(options.airportsUrl||defaultAirportDataUrl()).then(loaded=>{
+    airports=loaded;airportInputs.forEach(updateSuggestions);
+    if(!airports.length)root.querySelector('.flight-iata-help').textContent='No se pudo cargar el catálogo de ciudades y aeropuertos. Puedes usar un código IATA o recargar la página para volver a intentarlo.';
+  });
   const tripType=form.elements.tripType,returnField=root.querySelector('.flight-return');
   const syncTripType=()=>{
     const roundtrip=tripType.value==='roundtrip';
@@ -286,6 +329,7 @@ export function mountFlightSearch(container,options={}){
     const origin=form.elements.origin.value;
     form.elements.origin.value=form.elements.destination.value;
     form.elements.destination.value=origin;
+    airportInputs.forEach(updateSuggestions);
   };
   let controller=null,exploreController=null;
   const submit=async event=>{
@@ -343,4 +387,4 @@ export function mountFlightSearch(container,options={}){
   return {destroy(){controller?.abort();exploreController?.abort();root.replaceChildren()},form};
 }
 
-export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchFlights,showResolvedAirport,validateFlightQuery};
+export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery};

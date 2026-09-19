@@ -1,6 +1,6 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.0.1';
-import {mountCombinedSearch} from './combined.js?v=2.0.1';
+import {mountFlightSearch} from './flights.js?v=2.0.2';
+import {mountCombinedSearch} from './combined.js?v=2.0.2';
 import {mountAccount} from './account.js?v=2.0.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
@@ -110,7 +110,7 @@ function saveHotelOffer(hotel,query,{manual=false}={}){
   const identity=hotelIdentity(hotel,query);
   let saved=savedHotels.find(item=>item.identity===identity);
   if(!saved){
-    saved={id:newId(),identity,name:hotel.name,location:hotel.location||query.destination,image:hotel.image||'',rating:hotel.rating||'',features:[...(hotel.features||[])],search:{destination:query.destination,checkIn:query.checkIn,checkOut:query.checkOut,adults:query.adults,childrenAges:[...(query.childrenAges||[])],accommodationType:query.accommodationType,board:query.board,nights:query.nights},offers:[]};
+    saved={id:newId(),identity,name:hotel.name,location:hotel.location||query.destination,image:hotel.image||'',rating:hotel.rating||'',features:[...(hotel.features||[])],search:{destination:query.destination,checkIn:query.checkIn,checkOut:query.checkOut,adults:query.adults,childrenAges:[...(query.childrenAges||[])],accommodationType:query.accommodationType,board:query.board,nights:query.nights,minPrice:query.minPrice,maxPrice:query.maxPrice,rooms:query.rooms,currency:query.currency},offers:[]};
     savedHotels.unshift(saved);
   }
   const offer={provider:hotel.provider||'Oferta manual',url:hotel.url||'',nightlyPrice:Number(hotel.nightlyPrice)||0,totalPrice:Number(hotel.totalPrice)||0,currency:hotel.currency||'EUR',manual,savedAt:new Date().toISOString()};
@@ -223,11 +223,41 @@ function renderComparison(){
   </tbody></table></div></section>`;
 }
 
+function safeOfferUrl(value){
+  try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}
+}
+
+function openSavedHotel(id,showComparison=false){
+  const hotel=savedHotels.find(item=>item.id===id);
+  if(!hotel)return;
+  const root=document.querySelector('#modal'),search=hotel.search||{};
+  const offers=(hotel.offers||[]).map(offer=>{
+    const url=safeOfferUrl(offer.url),date=new Date(offer.savedAt);
+    return `<article class="saved-card"><div class="saved-main"><div><h3>${esc(offer.provider||'Oferta guardada')}</h3><p>${Number.isNaN(date.getTime())?'Fecha de guardado no disponible':`Guardada el ${esc(date.toLocaleString('es-ES'))}`}</p></div><div class="saved-price"><strong>${money(offer.totalPrice,offer.currency)}</strong><small>${money(offer.nightlyPrice,offer.currency)} / noche</small></div></div><div class="saved-bottom">${url?`<a class="primary compare-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir oferta ↗</a>`:'Esta oferta no tiene un enlace disponible.'}</div></article>`;
+  }).join('');
+  root.innerHTML=`<div class="modal-backdrop"><section class="modal saved-modal" role="dialog" aria-modal="true" aria-labelledby="savedHotelTitle"><div class="modal-title"><div><span class="eyebrow">Búsqueda guardada</span><h2 id="savedHotelTitle">${esc(hotel.name)}</h2></div><button class="ghost" id="closeModal" type="button">Cerrar</button></div><p>${esc(hotel.location||search.destination||'')}${hotel.rating?` · ★ ${esc(hotel.rating)}`:''}</p><div class="trip-context">${esc(searchSummary(search))}${search.nights?` · ${esc(search.nights)} noches`:''}${'minPrice' in search?` · ${esc(priceLabel(search))}`:''}</div><div class="chips">${(hotel.features||[]).map(feature=>`<span class="chip">${esc(feature)}</span>`).join('')}</div><p class="note">Estos son los datos y precios guardados. Abre una oferta para consultar su disponibilidad y precio actual.</p><div class="saved-list">${offers||'<p>No hay ofertas guardadas para este alojamiento.</p>'}</div><button class="ghost" id="backToSaved" type="button">← Volver a guardados</button></section></div>`;
+  const close=()=>{root.replaceChildren();document.querySelector('#savedBtn').focus()};
+  root.querySelector('#closeModal').onclick=close;
+  root.querySelector('.modal-backdrop').onclick=event=>{if(event.target===event.currentTarget)close()};
+  root.querySelector('#backToSaved').onclick=()=>{
+    openSaved(showComparison);
+    [...root.querySelectorAll('[data-open-saved]')].find(button=>button.dataset.openSaved===id)?.focus();
+  };
+  root.querySelector('.modal').onkeydown=event=>{
+    if(event.key==='Escape'){event.preventDefault();close();return}
+    if(event.key!=='Tab')return;
+    const controls=[...root.querySelectorAll('button,a[href]')],first=controls[0],last=controls.at(-1);
+    if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+  };
+  root.querySelector('#closeModal').focus();
+}
+
 function openSaved(showComparison=false){
   const root=document.querySelector('#modal');
   const activeQuery=currentQuery||readQueryFromForm();
   [...selectedSaved].forEach(id=>{if(!savedHotels.some(hotel=>hotel.id===id))selectedSaved.delete(id)});
-  const list=savedHotels.length?savedHotels.map(hotel=>{const offer=cheapestOffer(hotel);return `<article class="saved-card"><label class="compare-check"><input type="checkbox" data-compare="${esc(hotel.id)}" ${selectedSaved.has(hotel.id)?'checked':''}><span>Comparar</span></label><div class="saved-main"><div><h3>${esc(hotel.name)}</h3><p>${esc(searchSummary(hotel.search))}</p></div><div class="saved-price"><strong>${money(offer.totalPrice,offer.currency)}</strong><small>${money(offer.nightlyPrice,offer.currency)} / noche · ${esc(offer.provider)}</small></div></div><div class="saved-bottom"><span>${hotel.offers.length} ${hotel.offers.length===1?'oferta':'ofertas'}${hotel.rating?` · ★ ${esc(hotel.rating)}`:''}</span><button class="danger" type="button" data-remove-saved="${esc(hotel.id)}">Eliminar</button></div></article>`}).join(''):'<div class="saved-empty"><span>♡</span><h3>Aún no has guardado hoteles</h3><p>Busca un alojamiento y pulsa “Guardar”, o añade una oferta externa.</p></div>';
+  const list=savedHotels.length?savedHotels.map(hotel=>{const offer=cheapestOffer(hotel);return `<article class="saved-card"><label class="compare-check"><input type="checkbox" data-compare="${esc(hotel.id)}" ${selectedSaved.has(hotel.id)?'checked':''}><span>Comparar</span></label><div class="saved-main"><div><h3><button class="saved-title-button" type="button" data-open-saved="${esc(hotel.id)}">${esc(hotel.name)}</button></h3><p>${esc(searchSummary(hotel.search))}</p></div><div class="saved-price"><strong>${money(offer.totalPrice,offer.currency)}</strong><small>${money(offer.nightlyPrice,offer.currency)} / noche · ${esc(offer.provider)}</small></div></div><div class="saved-bottom"><span>${hotel.offers.length} ${hotel.offers.length===1?'oferta':'ofertas'}${hotel.rating?` · ★ ${esc(hotel.rating)}`:''}</span><button class="ghost" type="button" data-open-saved="${esc(hotel.id)}">Consultar →</button><button class="danger" type="button" data-remove-saved="${esc(hotel.id)}">Eliminar</button></div></article>`}).join(''):'<div class="saved-empty"><span>♡</span><h3>Aún no has guardado hoteles</h3><p>Busca un alojamiento y pulsa “Guardar”, o añade una oferta externa.</p></div>';
   root.innerHTML=`<div class="modal-backdrop"><section class="modal saved-modal"><div class="modal-title"><div><span class="eyebrow">Tu selección</span><h2>Hoteles guardados</h2></div><button class="ghost" id="closeModal">Cerrar</button></div><p class="note">Se guardan en este dispositivo junto con las fechas, los ocupantes y el precio visto.</p><div class="saved-list">${list}</div><div class="saved-toolbar"><span id="compareStatus">${selectedSaved.size} de 4 seleccionados</span><button class="primary" id="compareBtn" type="button" ${selectedSaved.size<2?'disabled':''}>Comparar seleccionados</button></div>${showComparison?renderComparison():''}<details class="manual-add"><summary>＋ Añadir una oferta de otra web</summary><p class="note">Para un hotel encontrado en Booking, Momondo, KAYAK u otra página.</p><div class="trip-context">Se asociará a: <strong>${esc(searchSummary(activeQuery))}</strong></div><form id="manualHotelForm" class="manual-grid"><label>Hotel<input name="name" required placeholder="Nombre del hotel"></label><label>Proveedor<input name="provider" required placeholder="Booking, Momondo…"></label><label>Precio total (€)<input name="totalPrice" type="number" min="1" step="0.01" required placeholder="450"></label><label>Valoración opcional<input name="rating" type="number" min="0" max="10" step="0.1" placeholder="8,7"></label><label class="manual-wide">Enlace de la oferta<input name="url" type="url" required placeholder="https://..."></label><label class="manual-wide">Servicios opcionales<input name="features" placeholder="Desayuno, piscina, cancelación gratis"></label><button class="primary manual-wide" type="submit">Guardar oferta</button></form></details></section></div>`;
   root.querySelector('#closeModal').onclick=()=>root.innerHTML='';
   root.querySelector('.modal-backdrop').onclick=event=>{if(event.target===event.currentTarget)root.innerHTML=''};
@@ -241,6 +271,7 @@ function openSaved(showComparison=false){
   root.querySelectorAll('[data-remove-saved]').forEach(button=>button.onclick=()=>{
     savedHotels=savedHotels.filter(hotel=>hotel.id!==button.dataset.removeSaved);selectedSaved.delete(button.dataset.removeSaved);persistSaved();openSaved(false);
   });
+  root.querySelectorAll('[data-open-saved]').forEach(button=>button.onclick=()=>openSavedHotel(button.dataset.openSaved,showComparison));
   compareButton.onclick=()=>openSaved(true);
   root.querySelector('#manualHotelForm').onsubmit=event=>{
     event.preventDefault();const data=new FormData(event.currentTarget),totalPrice=Number(data.get('totalPrice'));
@@ -251,4 +282,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=10'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=11'));

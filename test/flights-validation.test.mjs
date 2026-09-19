@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveAirportCode,validateFlightQuery} from '../src/flights.js';
+import {readFileSync} from 'node:fs';
+import {resolveAirportCode,searchAirports,validateFlightQuery} from '../src/flights.js';
+const catalog=JSON.parse(readFileSync(new URL('../public/data/airports.json',import.meta.url))).airports;
 
 const validQuery={
   tripType:'roundtrip',origin:'MAD',destination:'FCO',departureDate:'2026-09-10',returnDate:'2026-09-17',
@@ -38,4 +40,30 @@ test('resuelve ciudad, aeropuerto seleccionado y código IATA',()=>{
   assert.equal(resolveAirportCode('Roma · Fiumicino (FCO)',airports),'FCO');
   assert.equal(resolveAirportCode('jfk',airports),'JFK');
   assert.equal(resolveAirportCode('Ciudad desconocida',airports),'');
+});
+
+test('reconoce ciudades españolas, traducciones y municipios del catálogo real',()=>{
+  for(const [city,codes] of Object.entries({Sevilla:['SVQ'],Roma:['CIA','FCO'],Londres:['LCY','LGW','LHR','LTN','SEN','STN'],Paris:['CDG','ORY','BVA'],'A Coruña':['LCG'],'San Sebastian':['EAS'],Bruselas:['BRU','CRL'],Venecia:['VCE','TSF'],Florencia:['FLR'],Munich:['MUC']})){
+    assert.ok(codes.includes(resolveAirportCode(city,catalog)),city);
+    const suggestions=searchAirports(city,catalog).map(airport=>airport.iata);
+    for(const code of codes)assert.ok(suggestions.includes(code),`${city}: falta ${code}`);
+  }
+});
+
+test('permite nombres parciales inequívocos y exige selección si son ambiguos',()=>{
+  assert.equal(resolveAirportCode('Barajas',catalog),'MAD');
+  assert.equal(resolveAirportCode('Heathrow',catalog),'LHR');
+  assert.equal(resolveAirportCode('Ciudad inventada',catalog),'');
+  assert.equal(resolveAirportCode('San',catalog),'SAN'); // El código IATA continúa funcionando.
+  assert.equal(resolveAirportCode('Lond',catalog),'');
+  assert.equal(searchAirports('bcn',catalog)[0].iata,'BCN');
+  assert.equal(resolveAirportCode('Sevilla · Seville Airport · ES (SVQ)',catalog),'SVQ');
+});
+
+test('prioriza coincidencias de ciudad e ignora acentos y espacios',()=>{
+  assert.equal(resolveAirportCode('  MÚNICH  ',catalog),'MUC');
+  assert.ok(searchAirports('lond',catalog).some(airport=>airport.iata==='LHR'));
+  assert.deepEqual(searchAirports('',catalog),[]);
+  assert.ok(searchAirports('a',catalog).length<=20);
+  assert.equal(resolveAirportCode('mad',[]),'MAD');
 });

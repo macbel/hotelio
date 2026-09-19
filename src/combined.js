@@ -1,5 +1,5 @@
 import {searchPublicProvider} from './providers.js?v=2.0.1';
-import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.0.1';
+import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.0.2';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
 const iso=date=>date.toISOString().slice(0,10);
@@ -54,7 +54,10 @@ export function mountCombinedSearch(container,{providersPromise}={}){
   </section>`;
   const form=root.querySelector('.combo-form'),output=root.querySelector('.combo-output');
   let airports=[],controller=null,flightOptions=[],hotelOptions=[],flightUrl='';
-  const airportsReady=loadAirports(root.querySelector('#comboAirports'),new URL('./data/airports.json',document.baseURI).href).then(value=>{airports=value}).catch(()=>{});
+  const airportList=root.querySelector('#comboAirports'),airportInputs=[form.elements.origin,form.elements.destination];
+  const updateSuggestions=input=>{airportList.innerHTML=searchAirports(input.value,airports).map(airport=>`<option value="${esc(`${[airport.city,airport.name,airport.country].filter(Boolean).join(' · ')} (${airport.iata})`)}"></option>`).join('')};
+  airportInputs.forEach(input=>input.addEventListener('input',()=>updateSuggestions(input)));
+  const airportsReady=loadAirports(airportList,new URL('./data/airports.json',document.baseURI).href).then(value=>{airports=value;airportInputs.forEach(updateSuggestions)}).catch(()=>{});
   const updateTotal=()=>{
     const selectedFlight=output.querySelector('[name=comboFlight]:checked'),selectedHotel=output.querySelector('[name=comboHotel]:checked');
     const flight=flightOptions[Number(selectedFlight?.value)],hotel=hotelOptions[Number(selectedHotel?.value)],summary=output.querySelector('.combo-summary');

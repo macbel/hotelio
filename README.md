@@ -50,6 +50,10 @@ Los enlaces externos ya no incluyen parámetros internos o inventados. Solo Expe
 
 ## Buscador de vuelos
 
+En **Guardados**, pulsa el nombre del alojamiento o **Consultar** para abrir sus fechas, ocupantes, preferencias, servicios y todas las ofertas guardadas. Cada oferta conserva el precio y la fecha de guardado y permite abrir el enlace del proveedor. La consulta no ejecuta otra búsqueda ni actualiza los precios históricos.
+
+Los campos de origen y destino reconocen ciudad, nombre de aeropuerto y código IATA, con sugerencias filtradas y nombres habituales en español (por ejemplo, Sevilla, Roma, Londres o París). Si una ciudad tiene varios aeropuertos, puedes elegir una sugerencia concreta; al enviar solo la ciudad se muestra el aeropuerto elegido en el campo. Los nombres parciales ambiguos requieren seleccionar una sugerencia.
+
 La pestaña **Vuelos** acepta una ciudad, el nombre de un aeropuerto o un código IATA. Las sugerencias salen de un catálogo local de OurAirports y se convierten al código IATA antes de consultar el motor Google Flights de SerpApi desde `/api/flights.php`. La clave permanece en el servidor y cada búsqueda no almacenada realiza una única llamada. Hotelio muestra hasta 20 opciones y abre el enlace seguro `search_metadata.google_flights_url` para que el usuario confirme precio y condiciones en Google Flights.
 
 - No se gestionan pagos, reservas, PNR ni datos de pasajeros.
