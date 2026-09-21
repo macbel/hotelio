@@ -90,7 +90,7 @@
   .flight-confirm a{white-space:normal;text-align:center}.flight-usage{justify-content:center}
 }
 @media(max-width:470px){
-  .topbar{align-items:flex-start;height:auto;min-height:86px;padding:10px 0}.topbar .nav-actions{align-items:flex-end;flex-direction:column}.travel-switch{order:2}
+  .topbar{align-items:flex-start;display:grid;grid-template-columns:1fr;gap:10px;height:auto;min-height:86px;padding:10px 0}.topbar .nav-actions{align-items:stretch;flex-direction:column;min-width:0;width:100%}.topbar .nav-actions>.ghost{align-self:flex-end}.travel-switch{order:2;width:100%;max-width:100%;overflow-x:auto;justify-content:flex-start}.travel-switch-btn{flex:0 0 auto}
   .flight-heading{align-items:flex-start}.flight-provider{display:none}
   .flight-grid-main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .flight-grid-options{grid-template-columns:1fr 1fr}

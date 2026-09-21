@@ -1,7 +1,7 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.1.0';
-import {mountCombinedSearch} from './combined.js?v=2.0.3';
-import {mountAccount} from './account.js?v=2.1.0';
+import {mountFlightSearch} from './flights.js?v=2.1.1';
+import {mountCombinedSearch} from './combined.js?v=2.1.1';
+import {mountAccount} from './account.js?v=2.1.1';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -42,12 +42,12 @@ document.querySelector('#app').innerHTML = `
     </section>
     <section id="flightView" class="travel-view" hidden></section>
     <section id="combinedView" class="travel-view" hidden></section>
-  </main><div id="modal"></div>`;
+  </main><div id="modal"></div><div id="offlineNotice" class="offline-notice" role="status" aria-live="polite" hidden>Sin conexión. Puedes seguir consultando lo guardado; las búsquedas nuevas estarán disponibles al recuperar Internet.</div>`;
 
 mountFlightSearch('#flightView');
 mountCombinedSearch('#combinedView',{providersPromise:providerConfigurationPromise});
 mountAccount();
-const setTravelView=view=>{
+const setTravelView=(view,{history=true}={})=>{
   const flights=view==='flights';
   const combined=view==='combined';
   document.querySelector('#hotelView').hidden=flights||combined;
@@ -56,10 +56,20 @@ const setTravelView=view=>{
   document.querySelector('#savedBtn').hidden=flights||combined;
   document.querySelectorAll('[data-travel-view]').forEach(button=>button.classList.toggle('is-active',button.dataset.travelView===view));
   const hash=flights?'#vuelos':combined?'#hotel-vuelo':'';
-  if(location.hash!==hash)history.replaceState(null,'',`${location.pathname}${location.search}${hash}`);
+  if(location.hash!==hash){const url=`${location.pathname}${location.search}${hash}`;if(history)window.history.pushState({view},'',url);else window.history.replaceState({view},'',url)}
 };
 document.querySelectorAll('[data-travel-view]').forEach(button=>button.addEventListener('click',()=>setTravelView(button.dataset.travelView)));
-setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'?'combined':'hotels');
+setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'?'combined':'hotels',{history:false});
+window.addEventListener('popstate',()=>{
+  document.querySelector('#accountPanel')?.setAttribute('hidden','');
+  document.querySelector('#accountOverlay')?.setAttribute('hidden','');
+  document.querySelector('#modal')?.replaceChildren();
+  setTravelView(location.hash==='#vuelos'?'flights':location.hash==='#hotel-vuelo'?'combined':'hotels',{history:false});
+});
+
+const offlineNotice=document.querySelector('#offlineNotice');
+const updateOnlineState=()=>{if(offlineNotice)offlineNotice.hidden=navigator.onLine!==false};
+window.addEventListener('online',updateOnlineState);window.addEventListener('offline',updateOnlineState);updateOnlineState();
 
 const setField=(form,name,value)=>{if(form?.elements?.[name]&&value!==undefined&&value!==null)form.elements[name].value=String(value)};
 const openSavedSearch=event=>{
@@ -319,4 +329,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=14'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=15'));

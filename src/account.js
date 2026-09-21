@@ -1,12 +1,15 @@
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const tokenKey='vuelotel-session-v1';
-const native=()=>location.protocol==='capacitor:'||location.protocol==='file:';
+// Capacitor sirve la aplicación con https://localhost. El protocolo por sí
+// solo no permite distinguirla de la web publicada, por eso usamos su API
+// oficial y dejamos los protocolos antiguos como compatibilidad.
+const native=()=>Boolean(globalThis.Capacitor?.isNativePlatform?.())||location.protocol==='capacitor:'||location.protocol==='file:';
 const api=file=>native()?`https://www.alufi.es/vuelotel/api/${file}`:new URL(`./api/${file}`,document.baseURI).href;
 let token=localStorage.getItem(tokenKey)||'',session=null,lastSearch=null;
 
 async function request(file,{method='GET',body}={}){
   const response=await fetch(api(file),{method,credentials:'include',headers:{Accept:'application/json',...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});
-  const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||`Error ${response.status}`);return data;
+  const data=await response.json().catch(()=>({}));if(!response.ok){const error=new Error(data.error||`Error ${response.status}`);error.status=response.status;throw error}return data;
 }
 
 function authMarkup(mode='login'){
@@ -90,5 +93,9 @@ async function showAdminV2(){
 export async function mountAccount(){
   document.body.insertAdjacentHTML('beforeend','<div id="accountOverlay" class="account-overlay" hidden></div><aside id="accountPanel" class="account-panel" hidden></aside>');
   document.querySelector('#accountBtn')?.addEventListener('click',()=>session?showAccount():showAuth());document.querySelector('#adminBtn')?.addEventListener('click',showAdminV2);window.addEventListener('vuelotel:search-complete',event=>showSaveBar(event.detail));window.addEventListener('vuelotel:favorite',event=>saveFavorite(event.detail));
-  try{const data=await request('auth.php');session=data.user||null}catch{token='';localStorage.removeItem(tokenKey)}syncHeader();if(new URLSearchParams(location.search).has('reset'))showAuth();
+  try{const data=await request('auth.php');session=data.user||null}catch(error){
+    // Un fallo de red/offline no invalida una sesión que puede seguir siendo
+    // válida. Solo una respuesta explícita del backend elimina el token.
+    if(error?.status===401||error?.status===403){token='';session=null;localStorage.removeItem(tokenKey)}
+  }syncHeader();if(new URLSearchParams(location.search).has('reset'))showAuth();
 }

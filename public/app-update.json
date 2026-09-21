@@ -1,7 +1,7 @@
 {
-  "versionCode": 7,
-  "versionName": "2.0.0",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/vuelotel-2.0.0.apk",
-  "sha256": "15a4a6dc83b09a6079c677e03846c7d477a8724a3d1c57bacad939280fe0cebb",
-  "releaseNotes": "Estrena Vuelotel con hotel, vuelo y búsqueda combinada, cuentas de usuario, favoritos, búsquedas guardadas, alertas de precio, maletas y fechas flexibles."
+  "versionCode": 8,
+  "versionName": "2.1.1",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/vuelotel-2.1.1.apk",
+  "sha256": "1e9d406af6d6228346340118461df2d753b95fdf7f9841c9e6aafedc4b0748e7",
+  "releaseNotes": "Mejora la experiencia móvil con navegación adaptable, safe areas, paneles con scroll, aviso sin conexión y una sesión nativa más resistente."
 }
