@@ -1,7 +1,7 @@
 {
-  "versionCode": 8,
-  "versionName": "2.1.1",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/vuelotel-2.1.1.apk",
-  "sha256": "1e9d406af6d6228346340118461df2d753b95fdf7f9841c9e6aafedc4b0748e7",
-  "releaseNotes": "Mejora la experiencia móvil con navegación adaptable, safe areas, paneles con scroll, aviso sin conexión y una sesión nativa más resistente."
+  "versionCode": 9,
+  "versionName": "2.2.0",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/alufivia-2.2.0.apk",
+  "sha256": "2de2d1180ad427cf529d28bf13719f335b70e8a7d5288648bd12fa64f75611ba",
+  "releaseNotes": "Alufivia estrena identidad e interfaz. El seguimiento de destinos compara fechas reales, muestra la cobertura y permite continuar sin perder lo ya comprobado."
 }

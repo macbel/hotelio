@@ -1,4 +1,4 @@
-# Vuelotel
+# Alufivia
 
 Aplicación web/PWA y Android para comparar alojamientos, vuelos y viajes combinados. Incluye cuentas, favoritos, búsquedas guardadas, alertas de precio y administración de usuarios.
 
@@ -16,7 +16,7 @@ El servidor se inicia con `--use-system-ca` para respetar el almacén de certifi
 
 Las credenciales se guardan en `.hotelio-config.php`, fuera de la carpeta pública `/vuelotel`. Este archivo está ignorado por Git y nunca se entrega al navegador ni se incluye en el APK. Consulta [la guía de migración](deployment/MIGRACION-VUELOTEL.md) antes de renombrar la carpeta del servidor.
 
-La configuración de proveedores está disponible en `/vuelotel/admin/`, protegida con contraseña. La administración de usuarios, búsquedas y alertas se abre desde la cuenta administradora dentro de Vuelotel.
+La configuración de proveedores está disponible en `/vuelotel/admin/`, protegida con contraseña. La administración de usuarios, búsquedas y alertas se abre desde la cuenta administradora dentro de Alufivia. La ruta pública y el identificador Android existentes se mantienen para conservar enlaces e instalaciones.
 
 El panel permite cambiar la contraseña introduciendo primero la actual. Si se olvida, envía al correo privado configurado un enlace de un solo uso que caduca en una hora. Hotelio nunca envía ni recupera la contraseña existente.
 
@@ -54,7 +54,9 @@ En **Favoritos**, pulsa el nombre del alojamiento o **Consultar** para abrir sus
 
 Los campos de origen y destino reconocen ciudad, nombre de aeropuerto y código IATA, con sugerencias filtradas y nombres habituales en español (por ejemplo, Sevilla, Roma, Londres o París). Si una ciudad tiene varios aeropuertos, puedes elegir una sugerencia concreta; al enviar solo la ciudad se muestra el aeropuerto elegido en el campo. Los nombres parciales ambiguos requieren seleccionar una sugerencia.
 
-La pestaña **Vuelos** acepta una ciudad, el nombre de un aeropuerto o un código IATA. Las sugerencias salen de un catálogo local de OurAirports y se convierten al código IATA antes de consultar el motor Google Flights de SerpApi desde `/api/flights.php`. La clave permanece en el servidor y cada búsqueda no almacenada realiza una única llamada. Hotelio muestra hasta 20 opciones y abre el enlace seguro `search_metadata.google_flights_url` para que el usuario confirme precio y condiciones en Google Flights.
+La pestaña **Vuelos y destinos** acepta una ciudad, el nombre de un aeropuerto o un código IATA. Las sugerencias salen de un catálogo local de OurAirports y se convierten al código IATA antes de consultar el motor Google Flights de SerpApi desde `/api/flights.php`. La clave permanece en el servidor y cada búsqueda no almacenada realiza una única llamada. Alufivia muestra hasta 20 opciones y abre el enlace seguro `search_metadata.google_flights_url` para que el usuario confirme precio y condiciones en Google Flights.
+
+**Seguir un destino** consulta fechas de ida y vuelta reales para el aeropuerto indicado, la estancia exacta, los pasajeros y las maletas de mano. Compara hasta cuatro fechas por acción y conserva la cobertura de la ventana en la caché privada. La interfaz muestra cuántas fechas se han comprobado y permite **Comparar más fechas**. Un resultado parcial nunca se presenta como el mínimo definitivo. Las maletas facturadas se guardan como preferencia para confirmar la tarifa final. Las alertas solo comparan precios cuando la ventana está completa; las alertas anteriores a este cambio establecen una referencia nueva al completar su primera comparación.
 
 - No se gestionan pagos, reservas, PNR ni datos de pasajeros.
 - Los precios son orientativos y siempre deben confirmarse en la página de compra.
