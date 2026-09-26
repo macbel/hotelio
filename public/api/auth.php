@@ -38,7 +38,7 @@ if ($action === 'logout') {
 
 if ($action === 'request_reset') {
     $email = strtolower(trim((string) ($body['email'] ?? ''))); $statement=$db->prepare("SELECT id,email FROM users WHERE email=? AND status='active'"); $statement->execute(array($email)); $user=$statement->fetch();
-    if ($user) { $token=vuelotel_token(); $db->prepare('UPDATE users SET reset_token_hash=?,reset_expires_at=?,updated_at=? WHERE id=?')->execute(array(vuelotel_hash_token($token),$now+3600,$now,$user['id'])); $link=vuelotel_app_url('?reset='.rawurlencode($token)); vuelotel_send_mail($user['email'],'Recupera tu contraseña de Alufivia','<p>Usa este enlace durante la próxima hora:</p><p><a href="'.htmlspecialchars($link,ENT_QUOTES,'UTF-8').'">Crear una nueva contraseña</a></p>'); }
+    if ($user) { $token=vuelotel_token(); $db->prepare('UPDATE users SET reset_token_hash=?,reset_expires_at=?,updated_at=? WHERE id=?')->execute(array(vuelotel_hash_token($token),$now+3600,$now,$user['id'])); $link=vuelotel_app_url('?reset='.rawurlencode($token)); vuelotel_send_mail($user['email'],'Recupera tu contraseña de Rumbiva','<p>Usa este enlace durante la próxima hora:</p><p><a href="'.htmlspecialchars($link,ENT_QUOTES,'UTF-8').'">Crear una nueva contraseña</a></p>'); }
     vuelotel_json(200,array('ok'=>true,'message'=>'Si la cuenta existe, recibirá un enlace de recuperación.'));
 }
 

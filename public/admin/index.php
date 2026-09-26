@@ -67,14 +67,14 @@ function admin_reset_token_is_valid($token, $config) {
 function admin_send_reset_email($email, $token) {
     if (!function_exists('mail')) return false;
     $url = 'https://www.alufi.es/vuelotel/admin/?reset=' . rawurlencode($token);
-    $subject = 'Restablecer la contraseña de Alufivia';
+    $subject = 'Restablecer la contraseña de Rumbiva';
     $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
-    $body = "Se ha solicitado cambiar la contraseña del panel privado de Alufivia.\n\n";
+    $body = "Se ha solicitado cambiar la contraseña del panel privado de Rumbiva.\n\n";
     $body .= "Crea una contraseña nueva desde este enlace:\n" . $url . "\n\n";
     $body .= "El enlace caduca en 1 hora y solo puede utilizarse una vez.\n";
     $body .= "Si no has solicitado el cambio, ignora este mensaje.\n";
     $headers = array(
-        'From: Alufivia <no-reply@alufi.es>',
+        'From: Rumbiva <no-reply@alufi.es>',
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: 8bit'
@@ -214,14 +214,14 @@ $validResetToken = $hasResetToken && admin_reset_token_is_valid($resetToken, $co
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Administración · Alufivia</title>
+  <title>Administración · Rumbiva</title>
   <style>
     :root{font-family:system-ui,sans-serif;color:#102a2e;background:#f5f2eb}*{box-sizing:border-box}body{margin:0;padding:30px 16px}.panel{max-width:680px;margin:auto;background:#fff;border:1px solid #d9ded8;border-radius:22px;padding:26px;box-shadow:0 18px 55px #284d4a18}h1{margin:0 0 7px;font-size:28px}h2{font-size:19px;margin:0 0 6px}p{color:#647678;line-height:1.5}.card{border:1px solid #e0e4df;border-radius:15px;padding:16px;margin:15px 0}.row{display:flex;justify-content:space-between;gap:14px;align-items:center}.field{display:grid;gap:6px;margin:14px 0;font-weight:700;font-size:13px}.field input{width:100%;padding:12px;border:1px solid #bfc9c4;border-radius:10px;font:inherit}input[type=checkbox]{width:19px;height:19px;accent-color:#df6c57}button,.button{border:0;border-radius:11px;padding:12px 17px;background:#102a2e;color:#fff;font-weight:700;text-decoration:none;display:inline-block;cursor:pointer}.logout,.secondary{background:#edf3f0;color:#102a2e}.message{padding:11px;border-radius:10px;background:#e7f5ec;color:#225f45}.error{padding:11px;border-radius:10px;background:#f9e2de;color:#8e3526}.muted{font-size:12px}.actions{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:18px}.stack{display:grid;gap:10px}.forgot{margin-top:18px;border-top:1px solid #e0e4df;padding-top:14px}.forgot summary{cursor:pointer;font-weight:700;color:#315d5d}.email{font-weight:700;color:#315d5d;word-break:break-all}@media(max-width:520px){.row{align-items:flex-start}.panel{padding:20px}.actions{align-items:stretch;flex-direction:column}.actions .button,.actions button{text-align:center;width:100%}}
   </style>
 </head>
 <body>
 <main class="panel">
-  <h1>Panel privado de Alufivia</h1>
+  <h1>Panel privado de Rumbiva</h1>
   <p>Configuración común para la web y el APK. Las claves y la cuenta de administración permanecen en el servidor.</p>
   <?php if ($message !== ''): ?><p class="message"><?= admin_escape($message) ?></p><?php endif; ?>
   <?php if ($error !== ''): ?><p class="error"><?= admin_escape($error) ?></p><?php endif; ?>
@@ -278,7 +278,7 @@ $validResetToken = $hasResetToken && admin_reset_token_is_valid($resetToken, $co
         <div class="row"><div><strong>Vuelos · Google Flights</strong><p class="muted">Usa la misma clave privada de SerpApi. Caché fija de 1 hora.</p></div><input type="checkbox" name="flights_enabled" value="1" <?= !empty($config['flights']['enabled']) ? 'checked' : '' ?> aria-label="Activar buscador de vuelos"></div>
         <label class="field">Máximo de búsquedas de vuelos al mes<input type="number" name="flights_monthly_limit" min="1" max="240" value="<?= admin_escape($config['flights']['monthly_limit'] ?? 120) ?>"></label>
         <label class="field">Máximo por usuario y hora<input type="number" name="flights_hourly_limit" min="1" max="30" value="<?= admin_escape($config['flights']['per_ip_hourly_limit'] ?? 8) ?>"></label>
-        <p class="muted">Las consultas de SerpApi se comparten entre hoteles y vuelos. Alufivia limita los vuelos a 120 consultas mensuales para reservar margen.</p>
+        <p class="muted">Las consultas de SerpApi se comparten entre hoteles y vuelos. Rumbiva limita los vuelos a 120 consultas mensuales para reservar margen.</p>
       </section>
       <div class="actions"><a class="button logout" href="?logout=1">Cerrar sesión</a><button type="submit" name="save_providers" value="1">Guardar proveedores</button></div>
     </form>

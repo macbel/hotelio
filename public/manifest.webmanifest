@@ -1,6 +1,6 @@
 {
-  "name": "Alufivia — Hoteles y vuelos",
-  "short_name": "Alufivia",
+  "name": "Rumbiva — Hoteles y vuelos",
+  "short_name": "Rumbiva",
   "description": "Compara alojamientos y consulta vuelos según tus preferencias.",
   "start_url": "./",
   "display": "standalone",

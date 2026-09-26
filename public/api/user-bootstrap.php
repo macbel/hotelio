@@ -162,7 +162,7 @@ function vuelotel_issue_session($userId) {
 function vuelotel_send_mail($to, $subject, $html) {
     $config = hotelio_config();
     $from = filter_var($config['mail']['from'] ?? '', FILTER_VALIDATE_EMAIL) ?: 'no-reply@alufi.es';
-    $headers = "MIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nFrom: Alufivia <" . $from . ">\r\n";
+    $headers = "MIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nFrom: Rumbiva <" . $from . ">\r\n";
     $success = @mail($to, $subject, $html, $headers);
     try { vuelotel_db()->prepare('INSERT INTO mail_log(recipient,subject,success,created_at) VALUES(?,?,?,?)')->execute(array($to, $subject, $success ? 1 : 0, time())); } catch (Exception $ignored) {}
     return $success;

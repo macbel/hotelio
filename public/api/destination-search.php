@@ -26,7 +26,8 @@ function destination_date($value) {
 }
 
 function destination_client_key() {
-    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $trustCloudflare = in_array(strtolower(trim((string) getenv('HOTELIO_TRUST_CLOUDFLARE_IP'))), array('1', 'true', 'yes'), true);
+    $ip = $trustCloudflare && filter_var($_SERVER['HTTP_CF_CONNECTING_IP'] ?? '', FILTER_VALIDATE_IP) ? (string) $_SERVER['HTTP_CF_CONNECTING_IP'] : (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
     if (!filter_var($ip, FILTER_VALIDATE_IP)) $ip = 'unknown';
     return hash_hmac('sha256', $ip, hash('sha256', hotelio_config_path()));
 }
@@ -38,10 +39,11 @@ function destination_reserve($path, $settings) {
     $state = json_decode(stream_get_contents($handle) ?: '', true);
     if (!is_array($state)) $state = array();
     $now = time(); $month = gmdate('Y-m', $now); $client = destination_client_key();
-    if (($state['month'] ?? '') !== $month) { $state['month'] = $month; $state['monthly_calls'] = 0; $state['successes'] = array(); }
+    if (($state['month'] ?? '') !== $month) { $state['month'] = $month; $state['monthly_calls'] = 0; }
     $recent = array_values(array_filter((array) ($state['successes'][$client] ?? array()), function($stamp) use ($now) { return is_numeric($stamp) && (int) $stamp > $now - 3600; }));
+    $pending = array_filter((array) ($state['pending'][$client] ?? array()), function($stamp) use ($now) { return is_numeric($stamp) && (int) $stamp > $now - 300; });
     $failure = null;
-    if (count($recent) >= $settings['per_ip_hourly_limit']) $failure = array('error' => 'Límite temporal de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429, 'retryAfter' => max(60, (int) $recent[0] + 3600 - $now));
+    if (count($recent) + count($pending) >= $settings['per_ip_hourly_limit']) $failure = array('error' => 'Límite temporal de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429, 'retryAfter' => max(60, $recent ? (int) $recent[0] + 3600 - $now : 300));
     elseif ((int) ($state['monthly_calls'] ?? 0) >= $settings['monthly_limit']) $failure = array('error' => 'Límite mensual de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429);
     if ($failure === null) {
         $state['monthly_calls'] = (int) ($state['monthly_calls'] ?? 0) + 1;
@@ -70,7 +72,7 @@ function destination_provider($query, $departure, $return, $apiKey) {
     $params = destination_params($query, $departure, $return, $apiKey);
     $url = 'https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     $curl = curl_init($url);
-    curl_setopt_array($curl, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => array('Accept: application/json'), CURLOPT_USERAGENT => 'Alufivia/2.2'));
+    curl_setopt_array($curl, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => array('Accept: application/json'), CURLOPT_USERAGENT => 'Rumbiva/2.2'));
     $raw = curl_exec($curl); $status = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE); curl_close($curl);
     $data = json_decode($raw ?: '', true);
     if ($status === 429) return array('error' => 'El proveedor ha limitado temporalmente las consultas.', 'status' => 429);

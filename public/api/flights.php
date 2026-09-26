@@ -472,7 +472,7 @@ try {
         'query' => $query,
         'cached' => false,
         'cacheTtlSeconds' => $settings['cache_ttl_seconds'],
-        'notice' => 'Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Alufivia no gestiona pagos ni reservas.'
+        'notice' => 'Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Rumbiva no gestiona pagos ni reservas.'
     );
     hotelio_flights_cache_write($cachePath, $payload);
     flock($keyLock, LOCK_UN);

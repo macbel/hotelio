@@ -81,7 +81,7 @@ final class VuelotelUpdateChecker {
     private static void showPrompt(Activity activity, Release release) {
         if (activity.isFinishing()) return;
         new AlertDialog.Builder(activity)
-            .setTitle("Actualización de Alufivia disponible")
+            .setTitle("Actualización de Rumbiva disponible")
             .setMessage("Versión " + release.versionName + "\n\n" + release.notes + "\n\nSe descargará el APK y Android pedirá tu confirmación antes de instalarlo.")
             .setPositiveButton("Descargar", (dialog, which) -> download(activity, release))
             .setNegativeButton("Más tarde", null)
@@ -91,7 +91,7 @@ final class VuelotelUpdateChecker {
     private static void download(Activity activity, Release release) {
         String name = "vuelotel-update-" + release.versionCode + ".apk";
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(release.apkUrl));
-        request.setTitle("Actualizando Alufivia");
+        request.setTitle("Actualizando Rumbiva");
         request.setDescription("Descargando versión " + release.versionName);
         request.setMimeType("application/vnd.android.package-archive");
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);

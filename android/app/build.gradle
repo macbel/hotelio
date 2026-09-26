@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     buildFeatures {
-        buildConfig true
+        buildConfig = true
     }
     namespace = "es.alufi.vuelotel"
     compileSdk = rootProject.ext.compileSdkVersion
