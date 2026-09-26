@@ -1,3 +1,4 @@
 .account-item-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
 .search-actions input{border:0;border-radius:10px;padding:10px;background:#fff;color:var(--ink);font-weight:700;max-width:110px}
+.account-item .alert-status{line-height:1.45}.account-item .alert-status-error{color:#9b2c21}.admin-alert-health{background:#fff7e9;border:1px solid #eed9b8;border-radius:12px;padding:12px;font-size:13px;line-height:1.5}
 @media(max-width:520px){.account-item-actions{justify-content:flex-start;grid-column:2/-1}}

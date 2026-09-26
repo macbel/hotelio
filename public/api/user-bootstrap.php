@@ -74,6 +74,7 @@ function vuelotel_schema($db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, saved_search_id INTEGER, type TEXT NOT NULL, label TEXT NOT NULL,
       query_json TEXT NOT NULL, frequency_hours INTEGER NOT NULL, last_price REAL, currency TEXT NOT NULL DEFAULT 'EUR',
       last_checked_at INTEGER, next_check_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+      last_status TEXT, last_error TEXT, last_notified_at INTEGER,
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(saved_search_id) REFERENCES saved_searches(id) ON DELETE SET NULL
     );
@@ -85,6 +86,11 @@ function vuelotel_schema($db) {
     CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     INSERT OR IGNORE INTO app_settings(key,value) VALUES ('public_registration','1');
     INSERT OR IGNORE INTO app_settings(key,value) VALUES ('max_alerts_per_user','5');");
+    $alertColumns = $db->query('PRAGMA table_info(alerts)')->fetchAll();
+    $existingColumns = array_column($alertColumns, 'name');
+    foreach (array('last_status' => 'TEXT', 'last_error' => 'TEXT', 'last_notified_at' => 'INTEGER') as $column => $type) {
+        if (!in_array($column, $existingColumns, true)) $db->exec('ALTER TABLE alerts ADD COLUMN ' . $column . ' ' . $type);
+    }
 }
 
 function vuelotel_seed_admin($db) {

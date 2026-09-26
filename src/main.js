@@ -1,7 +1,7 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
 import {mountFlightSearch} from './flights.js?v=2.2.0';
 import {mountCombinedSearch} from './combined.js?v=2.2.0';
-import {mountAccount} from './account.js?v=2.2.0';
+import {mountAccount} from './account.js?v=2.2.1';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -96,7 +96,8 @@ const openSavedSearch=event=>{
     if(selection&&output){
       const flight=selection.flight||{},hotelSelection=selection.hotel||{};
       const route=[flight.departure?.airport,flight.arrival?.airport].filter(Boolean).join(' → ')||'Vuelo seleccionado';
-      output.innerHTML=`<aside class="flight-info"><strong>Selección guardada</strong><p>${esc(flight.airlines||route)} · ${esc(money(flight.price,flight.currency||selection.currency))}</p><p>${esc(hotelSelection.name||'Alojamiento')} · ${esc(money(hotelSelection.totalPrice,hotelSelection.currency||selection.currency))}</p><p>Total guardado: <strong>${esc(money(selection.total,selection.currency))}</strong>. Consulta de nuevo para confirmar disponibilidad y precio.</p></aside>`;
+      const flightUrl=safeSelectionUrl(flight.searchUrl,true),hotelUrl=safeSelectionUrl(hotelSelection.url);
+      output.innerHTML=`<aside class="flight-info"><strong>Selección guardada</strong><p>${esc(flight.airlines||route)} · ${esc(money(flight.price,flight.currency||selection.currency))}</p><p>${esc(hotelSelection.name||'Alojamiento')} · ${esc(money(hotelSelection.totalPrice,hotelSelection.currency||selection.currency))}</p><p>Total guardado: <strong>${esc(money(selection.total,selection.currency))}</strong>. Consulta de nuevo para confirmar disponibilidad y precio.</p><div class="combo-actions">${flightUrl?`<a href="${esc(flightUrl)}" target="_blank" rel="noopener noreferrer">Comprobar vuelo ↗</a>`:''}${hotelUrl?`<a href="${esc(hotelUrl)}" target="_blank" rel="noopener noreferrer">Comprobar hotel ↗</a>`:''}</div></aside>`;
     }
     form?.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
@@ -274,6 +275,16 @@ function safeOfferUrl(value){
   try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}
 }
 
+function safeSelectionUrl(value,flight=false){
+  if(typeof value!=='string'||!value.trim())return '';
+  try{
+    const url=new URL(value);
+    if(url.protocol!=='https:'||url.username||url.password||!url.hostname.includes('.')||url.hostname==='localhost')return '';
+    if(flight&&!(['www.google.com','google.com'].includes(url.hostname)&&url.pathname.startsWith('/travel/flights')))return '';
+    return url.href;
+  }catch{return ''}
+}
+
 function openSavedHotel(id,showComparison=false){
   const hotel=savedHotels.find(item=>item.id===id);
   if(!hotel)return;
@@ -329,4 +340,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=16'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=17'));
