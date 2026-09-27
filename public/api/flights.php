@@ -313,7 +313,7 @@ function hotelio_flights_google_url($value) {
     return trim($value);
 }
 
-function hotelio_flights_provider_request($query, $apiKey) {
+function hotelio_flights_provider_request($query, $apiKey, $departureToken = '') {
     $classMap = array('economy' => 1, 'premium_economy' => 2, 'business' => 3, 'first' => 4);
     $stopsMap = array('nonstop' => 1, 'up_to_one' => 2);
     $params = array(
@@ -335,6 +335,7 @@ function hotelio_flights_provider_request($query, $apiKey) {
     if (isset($stopsMap[$query['stops']])) $params['stops'] = $stopsMap[$query['stops']];
     if ($query['carryOnBags'] > 0) $params['bags'] = $query['carryOnBags'];
     if ($query['maxPrice'] !== null) $params['max_price'] = $query['maxPrice'];
+    if ($departureToken !== '') $params['departure_token'] = $departureToken;
 
     $url = 'https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     $curl = curl_init($url);
@@ -358,7 +359,7 @@ function hotelio_flights_provider_request($query, $apiKey) {
     return $data;
 }
 
-function hotelio_flights_normalize_results($data) {
+function hotelio_flights_normalize_results($data, $roundtrip = false) {
     $results = array();
     $groups = array('best_flights' => 'Mejor opción', 'other_flights' => 'Otras opciones');
     foreach ($groups as $key => $label) {
@@ -396,6 +397,7 @@ function hotelio_flights_normalize_results($data) {
                 'id' => substr($identifier, 0, 20),
                 'group' => $label,
                 'price' => $price,
+                'priceStatus' => $roundtrip ? 'outbound_only' : 'complete',
                 'currency' => 'EUR',
                 'durationMinutes' => max(0, (int) ($option['total_duration'] ?? 0)),
                 'stops' => max(0, count($segments) - 1),
@@ -404,13 +406,33 @@ function hotelio_flights_normalize_results($data) {
                 'departure' => $first['departure'],
                 'arrival' => $last['arrival'],
                 'segments' => $segments,
-                'provider' => 'Google Flights vía SerpApi'
+                'provider' => 'Google Flights vía SerpApi',
+                'departureToken' => isset($option['departure_token']) ? (string) $option['departure_token'] : ''
             );
             if (count($results) >= 20) break 2;
         }
     }
     return $results;
 }
+
+/** SerpApi returns the selected outbound leg's return choices in a second request.
+ * The second response's price is the itinerary price, not a price to add to outbound. */
+function hotelio_flights_complete_roundtrip($outbound, $returnData, $query) {
+    $returns = hotelio_flights_normalize_results($returnData, false);
+    foreach ($returns as $return) {
+        if ($return['departure']['airport'] !== $query['destination'] || $return['arrival']['airport'] !== $query['origin']) continue;
+        if (substr((string) $return['departure']['time'], 0, 10) !== $query['returnDate']) continue;
+        if (!is_numeric($return['price']) || $return['price'] <= 0) continue;
+        $outbound['outboundDisplayedPrice'] = $outbound['price'];
+        $outbound['price'] = $return['price'];
+        $outbound['priceStatus'] = 'complete';
+        $outbound['returnLeg'] = array('departure' => $return['departure'], 'arrival' => $return['arrival'], 'airlines' => $return['airlines'], 'stops' => $return['stops'], 'durationMinutes' => $return['durationMinutes'], 'segments' => $return['segments']);
+        return $outbound;
+    }
+    return $outbound;
+}
+
+if (defined('HOTELIO_FLIGHTS_LIBRARY_ONLY')) return;
 
 $requestMethod = isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : '';
 if ($requestMethod !== 'POST') hotelio_flights_respond(405, array('error' => 'Método no permitido.'));
@@ -436,7 +458,7 @@ try {
     $client = hotelio_flights_client_hash();
     $slot = hotelio_flights_reserve_client_slot($settings, $client);
 
-    $cacheKey = hash('sha256', json_encode($query, JSON_UNESCAPED_SLASHES));
+    $cacheKey = hash('sha256', 'v3:' . json_encode($query, JSON_UNESCAPED_SLASHES));
     $cachePath = $settings['storage_path'] . DIRECTORY_SEPARATOR . 'cache-' . $cacheKey . '.json';
     $cached = hotelio_flights_cache_read($cachePath, $settings['cache_ttl_seconds']);
     if ($cached !== null) {
@@ -466,13 +488,31 @@ try {
     $data = hotelio_flights_provider_request($query, $apiKey);
     $searchUrl = hotelio_flights_google_url($data['search_metadata']['google_flights_url'] ?? '');
     if ($searchUrl === '') throw new HotelioFlightException('Google Flights no devolvió un enlace seguro para continuar.', 502);
+    $results = hotelio_flights_normalize_results($data, $query['tripType'] === 'roundtrip');
+    if ($query['tripType'] === 'roundtrip') {
+        foreach ($results as $index => $option) {
+            if ($option['departure']['airport'] !== $query['origin'] || $option['arrival']['airport'] !== $query['destination']) continue;
+            if (substr((string) $option['departure']['time'], 0, 10) !== $query['departureDate']) continue;
+            if ($option['departureToken'] === '') continue;
+            try {
+                hotelio_flights_reserve_provider_call($settings);
+                $returnData = hotelio_flights_provider_request($query, $apiKey, $option['departureToken']);
+                $results[$index] = hotelio_flights_complete_roundtrip($option, $returnData, $query);
+            } catch (Exception $ignored) {
+                // The outbound results remain useful, but are explicitly marked incomplete.
+            }
+            break; // At most two provider calls per uncached round-trip search.
+        }
+    }
+    foreach ($results as &$option) unset($option['departureToken']);
+    unset($option);
     $payload = array(
-        'results' => hotelio_flights_normalize_results($data),
+        'results' => $results,
         'searchUrl' => $searchUrl,
         'query' => $query,
         'cached' => false,
         'cacheTtlSeconds' => $settings['cache_ttl_seconds'],
-        'notice' => 'Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Rumbiva no gestiona pagos ni reservas.'
+        'notice' => 'Solo los resultados marcados como ida y vuelta comprobada tienen una vuelta seleccionada. Confirma siempre precio final, equipaje y condiciones antes de comprar. Rumbiva no gestiona pagos ni reservas.'
     );
     hotelio_flights_cache_write($cachePath, $payload);
     flock($keyLock, LOCK_UN);

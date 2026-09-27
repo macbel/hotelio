@@ -1,6 +1,6 @@
 {
   "appId": "es.alufi.vuelotel",
-  "appName": "Vuelotel",
+  "appName": "Rumbiva",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

@@ -1,7 +1,7 @@
 {
-  "versionCode": 10,
-  "versionName": "2.2.1",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.2.1.apk",
-  "sha256": "f533d3bc976666fefda07744bf4d91418530cbcbba0f6f1b7c30643e3b62214ad",
-  "releaseNotes": "Las búsquedas guardadas permiten comprobar el vuelo y el hotel. Las alertas muestran su última revisión y el estado del correo; los fallos se reintentan."
+  "versionCode": 11,
+  "versionName": "2.3.0",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.3.0.apk",
+  "sha256": "c63b31be9b2a64f61fff4464ecbbd234220d30c90fb93f95f94cd0f0b166dce3",
+  "releaseNotes": "Radar de escapadas con ida y vuelta comprobadas, hotel para las mismas fechas y alertas del plan. Nueva navegación móvil."
 }

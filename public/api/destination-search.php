@@ -33,7 +33,7 @@ function destination_client_key() {
 }
 
 /** One reservation represents one actual SerpApi request, including provider failures. */
-function destination_reserve($path, $settings) {
+function destination_reserve($path, $settings, $calls = 1) {
     $handle = fopen($path, 'c+');
     if ($handle === false || !flock($handle, LOCK_EX)) return array('error' => 'No se pudo actualizar el control de consumo.', 'status' => 503);
     $state = json_decode(stream_get_contents($handle) ?: '', true);
@@ -43,11 +43,11 @@ function destination_reserve($path, $settings) {
     $recent = array_values(array_filter((array) ($state['successes'][$client] ?? array()), function($stamp) use ($now) { return is_numeric($stamp) && (int) $stamp > $now - 3600; }));
     $pending = array_filter((array) ($state['pending'][$client] ?? array()), function($stamp) use ($now) { return is_numeric($stamp) && (int) $stamp > $now - 300; });
     $failure = null;
-    if (count($recent) + count($pending) >= $settings['per_ip_hourly_limit']) $failure = array('error' => 'Límite temporal de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429, 'retryAfter' => max(60, $recent ? (int) $recent[0] + 3600 - $now : 300));
-    elseif ((int) ($state['monthly_calls'] ?? 0) >= $settings['monthly_limit']) $failure = array('error' => 'Límite mensual de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429);
+    if (count($recent) + count($pending) + $calls > $settings['per_ip_hourly_limit']) $failure = array('error' => 'Límite temporal de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429, 'retryAfter' => max(60, $recent ? (int) $recent[0] + 3600 - $now : 300));
+    elseif ((int) ($state['monthly_calls'] ?? 0) + $calls > $settings['monthly_limit']) $failure = array('error' => 'Límite mensual de consultas alcanzado. Conservamos las fechas ya comparadas.', 'status' => 429);
     if ($failure === null) {
-        $state['monthly_calls'] = (int) ($state['monthly_calls'] ?? 0) + 1;
-        $recent[] = $now;
+        $state['monthly_calls'] = (int) ($state['monthly_calls'] ?? 0) + $calls;
+        for ($index = 0; $index < $calls; $index++) $recent[] = $now;
         $state['successes'][$client] = $recent;
         rewind($handle); ftruncate($handle, 0);
         fwrite($handle, json_encode($state, JSON_UNESCAPED_SLASHES)); fflush($handle);
@@ -68,16 +68,50 @@ function destination_params($query, $departure, $return, $apiKey) {
     return $params;
 }
 
-function destination_provider($query, $departure, $return, $apiKey) {
-    $params = destination_params($query, $departure, $return, $apiKey);
+function destination_fetch($params) {
     $url = 'https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     $curl = curl_init($url);
-    curl_setopt_array($curl, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => array('Accept: application/json'), CURLOPT_USERAGENT => 'Rumbiva/2.2'));
+    curl_setopt_array($curl, array(CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => false, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_TIMEOUT => 25, CURLOPT_HTTPHEADER => array('Accept: application/json'), CURLOPT_USERAGENT => 'Rumbiva/2.3'));
     $raw = curl_exec($curl); $status = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE); curl_close($curl);
     $data = json_decode($raw ?: '', true);
     if ($status === 429) return array('error' => 'El proveedor ha limitado temporalmente las consultas.', 'status' => 429);
     if ($raw === false || $status < 200 || $status >= 300 || !is_array($data) || !empty($data['error'])) return array('error' => 'El proveedor no pudo comprobar esta fecha.', 'status' => 502);
-    return array('result' => destination_best($data, $query, $departure, $return));
+    return array('data' => $data);
+}
+
+function destination_provider($query, $departure, $return, $apiKey) {
+    $params = destination_params($query, $departure, $return, $apiKey);
+    $initial = destination_fetch($params);
+    if (isset($initial['error'])) return $initial;
+    $best = destination_best($initial['data'], $query, $departure, $return);
+    if ($best === null) return array('result' => null);
+    $token = $best['_departureToken']; unset($best['_departureToken']);
+    if ($token === '') return array('result' => null);
+    $params['departure_token'] = $token;
+    $returnResponse = destination_fetch($params);
+    if (isset($returnResponse['error'])) return $returnResponse;
+    return array('result' => destination_complete($best, $returnResponse['data'], $query, $return));
+}
+
+function destination_complete($best, $data, $query, $return) {
+    foreach (array('best_flights', 'other_flights') as $group) {
+        foreach ((array) ($data[$group] ?? array()) as $option) {
+            if (!is_array($option) || !is_numeric($option['price'] ?? null) || (float) $option['price'] <= 0) continue;
+            $legs = $option['flights'] ?? array();
+            if (!is_array($legs) || !$legs) continue;
+            $first = reset($legs); $last = end($legs);
+            if (($first['departure_airport']['id'] ?? '') !== $query['destination'] || ($last['arrival_airport']['id'] ?? '') !== $query['origin']) continue;
+            if (substr((string) ($first['departure_airport']['time'] ?? ''), 0, 10) !== $return) continue;
+            $price = (float) $option['price'];
+            if (($best['priceStatus'] ?? '') === 'complete' && $best['flightPrice'] <= $price) continue;
+            $best['flightPrice'] = $price;
+            $best['priceStatus'] = 'complete';
+            $best['checkedAt'] = gmdate('c');
+            $best['returnAirline'] = (string) ($first['airline'] ?? '');
+            $best['returnStops'] = max(0, count($legs) - 1);
+        }
+    }
+    return ($best['priceStatus'] ?? '') === 'complete' ? $best : null;
 }
 
 function destination_best($data, $query, $departure, $return) {
@@ -94,9 +128,9 @@ function destination_best($data, $query, $departure, $return) {
             $actualDestination = strtoupper((string) ($last['arrival_airport']['id'] ?? ''));
             if ($actualOrigin !== $query['origin'] || $actualDestination !== $query['destination']) continue;
             $price = (float) $option['price'];
-            if ($best !== null && $price >= $best['flightPrice']) continue;
+            if ($best !== null && $price >= $best['outboundDisplayedPrice']) continue;
             $airlines = array_values(array_unique(array_filter(array_map(function($flight) { return is_array($flight) ? (string) ($flight['airline'] ?? '') : ''; }, $flights))));
-            $best = array('destinationCode' => $query['destination'], 'destinationName' => $query['destination'], 'departureDate' => $departure, 'returnDate' => $return, 'flightPrice' => $price, 'currency' => 'EUR', 'airline' => implode(', ', $airlines), 'stops' => max(0, count($flights) - 1), 'flightLink' => $link);
+            $best = array('destinationCode' => $query['destination'], 'destinationName' => $query['destination'], 'departureDate' => $departure, 'returnDate' => $return, 'flightPrice' => null, 'outboundDisplayedPrice' => $price, 'currency' => 'EUR', 'airline' => implode(', ', $airlines), 'stops' => max(0, count($flights) - 1), 'flightLink' => $link, '_departureToken' => (string) ($option['departure_token'] ?? ''));
         }
     }
     return $best;
@@ -136,7 +170,7 @@ if (!is_array($input)) destination_out(400, array('error' => 'Faltan los datos d
 $query = array('origin' => strtoupper(trim((string) ($input['origin'] ?? ''))), 'destination' => strtoupper(trim((string) ($input['destination'] ?? ''))), 'startDate' => (string) ($input['startDate'] ?? ''), 'endDate' => (string) ($input['endDate'] ?? ''), 'minNights' => (int) ($input['minNights'] ?? 7), 'adults' => (int) ($input['adults'] ?? 1), 'children' => (int) ($input['children'] ?? 0), 'infants' => (int) ($input['infants'] ?? 0), 'carryOnBags' => (int) ($input['carryOnBags'] ?? 0), 'checkedBags' => (int) ($input['checkedBags'] ?? 0));
 $start = destination_date($query['startDate']); $end = destination_date($query['endDate']); $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
 if (!preg_match('/^[A-Z]{3}$/', $query['origin']) || !preg_match('/^[A-Z]{3}$/', $query['destination']) || $query['origin'] === $query['destination']) destination_out(400, array('error' => 'El origen y el destino deben ser códigos IATA de tres letras y distintos.'));
-if (!$start || !$end || $end < $start || $start < $today || $end > $today->modify('+365 days')) destination_out(400, array('error' => 'La ventana de salida no es válida.'));
+if (!$start || !$end || $end < $start || $start < $today || $end > $today->modify('+365 days') || $end->diff($start)->days > 6 || $end->modify('+' . $query['minNights'] . ' days') > $today->modify('+365 days')) destination_out(400, array('error' => 'Elige una ventana de salida de hasta 7 días dentro del próximo año.'));
 if ($query['minNights'] < 1 || $query['minNights'] > 30) destination_out(400, array('error' => 'La estancia debe ser de entre 1 y 30 noches.'));
 if ($query['adults'] < 1 || $query['children'] < 0 || $query['infants'] < 0 || array_sum(array($query['adults'], $query['children'], $query['infants'])) > 9 || $query['infants'] > $query['adults']) destination_out(400, array('error' => 'El número de pasajeros no es válido.'));
 if ($query['carryOnBags'] < 0 || $query['checkedBags'] < 0 || $query['carryOnBags'] + $query['checkedBags'] > array_sum(array($query['adults'], $query['children'], $query['infants']))) destination_out(400, array('error' => 'Las maletas no pueden superar el número de pasajeros.'));
@@ -147,13 +181,13 @@ $ttl = max(300, min(86400, (int) ($config['flights']['cache_ttl'] ?? 3600)));
 $storage = dirname(hotelio_config_path()) . DIRECTORY_SEPARATOR . '.hotelio-flight-data' . DIRECTORY_SEPARATOR . 'destinations';
 if (!is_dir($storage) && !mkdir($storage, 0700, true) && !is_dir($storage)) destination_out(503, array('error' => 'No se pudo preparar la caché.'));
 $dates = destination_dates($start, $end);
-$cache = $storage . DIRECTORY_SEPARATOR . hash('sha256', json_encode($query, JSON_UNESCAPED_SLASHES)) . '.json';
+$cache = $storage . DIRECTORY_SEPARATOR . 'v3-' . hash('sha256', json_encode($query, JSON_UNESCAPED_SLASHES)) . '.json';
 $handle = fopen($cache, 'c+');
 if ($handle === false || !flock($handle, LOCK_EX)) destination_out(503, array('error' => 'No se pudo coordinar la comparación de fechas.'));
 $state = json_decode(stream_get_contents($handle) ?: '', true);
 if (!is_array($state) || !isset($state['checked']) || !is_array($state['checked'])) $state = array('checked' => array(), 'results' => array(), 'startedAt' => time());
-// A completed comparison is a snapshot. Once stale, a new comparison starts without mixing old and new prices.
-if (count($state['checked']) === count($dates) && (int) ($state['completedAt'] ?? 0) < time() - $ttl) $state = array('checked' => array(), 'results' => array(), 'startedAt' => time());
+// Partial and complete comparisons are snapshots; never mix prices from different cache windows.
+if ((int) ($state['startedAt'] ?? 0) < time() - $ttl) $state = array('checked' => array(), 'results' => array(), 'startedAt' => time());
 $continue = !empty($body['continue']);
 if ($state['checked'] && !$continue) {
     $payload = destination_payload($query, $state, $dates, 'Comparación guardada. Puedes comparar más fechas sin perder las ya verificadas.', true);
@@ -161,8 +195,8 @@ if ($state['checked'] && !$continue) {
 }
 $pending = array_values(array_filter($dates, function($date) use ($state) { return !array_key_exists($date, $state['checked']); }));
 $failure = null; $performed = 0;
-foreach (array_slice($pending, 0, 4) as $departure) {
-    $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings);
+foreach (array_slice($pending, 0, 2) as $departure) {
+    $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings, 2);
     if ($failure !== null) break;
     $return = destination_date($departure)->modify('+' . $query['minNights'] . ' days')->format('Y-m-d');
     $response = destination_provider($query, $departure, $return, $apiKey);
@@ -176,7 +210,7 @@ if ($performed) {
     fwrite($handle, json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); fflush($handle);
 }
 $checked = count($state['checked']); $total = count($dates);
-$notice = $failure ? $failure['error'] : ($checked === $total ? 'Ventana completa. Precios orientativos para el destino indicado; confirma precio final y equipaje al comprar.' : 'Comparación parcial. Puedes revisar más fechas hasta completar la ventana.');
+$notice = $failure ? $failure['error'] : ($checked === $total ? 'Ventana completa. Se han elegido salidas y vueltas para las fechas comprobadas; confirma disponibilidad y costes pendientes al comprar.' : 'Comparación parcial. Puedes revisar más fechas hasta completar la ventana.');
 $payload = destination_payload($query, $state, $dates, $notice, !$performed, $failure['retryAfter'] ?? null);
 flock($handle, LOCK_UN); fclose($handle);
 if ($failure && !$checked) destination_out($failure['status'], array('error' => $failure['error'], 'retryAfter' => $failure['retryAfter'] ?? null, 'coverage' => $payload['coverage']));

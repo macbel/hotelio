@@ -29,41 +29,73 @@ function vuelotel_internal_post($path, $query, $continue = false) {
     return $data;
 }
 
-function vuelotel_lowest($data, $field) {
+function vuelotel_lowest($data, $field, $requireComplete = false) {
     $prices = array();
     foreach (($data['results'] ?? array()) as $item) {
+        if ($requireComplete && ($item['priceStatus'] ?? '') !== 'complete') continue;
         $value = (float) ($item[$field] ?? 0);
         if ($value > 0) $prices[] = $value;
     }
     return $prices ? min($prices) : null;
 }
 
+function vuelotel_plan_price($destinationResult, $query, $plan) {
+    if (!is_array($plan)) throw new Exception('El plan guardado no es válido.');
+    $flight = null;
+    foreach (($destinationResult['results'] ?? array()) as $item) {
+        if (($item['departureDate'] ?? '') === ($plan['departureDate'] ?? '') && ($item['returnDate'] ?? '') === ($plan['returnDate'] ?? '') && ($item['priceStatus'] ?? '') === 'complete' && (float) ($item['flightPrice'] ?? 0) > 0) { $flight = $item; break; }
+    }
+    if ($flight === null) throw new Exception('La fecha del plan todavía no tiene ida y vuelta comparables.');
+    $hotelQuery = array('destination' => (string) ($plan['destinationText'] ?? $query['destination'] ?? ''), 'checkIn' => $plan['departureDate'], 'checkOut' => $plan['returnDate'], 'adults' => (int) ($query['adults'] ?? 1), 'children' => (int) ($query['children'] ?? 0), 'childrenAges' => array_fill(0, max(0, min(8, (int) ($query['children'] ?? 0))), 8), 'guests' => (int) ($query['adults'] ?? 1) + (int) ($query['children'] ?? 0), 'rooms' => 1, 'minPrice' => null, 'maxPrice' => null, 'accommodationType' => 'any', 'board' => 'any', 'currency' => 'EUR', 'nights' => (int) ($query['minNights'] ?? 1));
+    $hotelResult = vuelotel_internal_post('search.php?provider=serpapi', $hotelQuery);
+    $wanted = mb_strtolower(trim((string) ($plan['hotelName'] ?? '')), 'UTF-8');
+    $hotelPrice = null;
+    foreach (($hotelResult['results'] ?? array()) as $hotel) {
+        if (mb_strtolower(trim((string) ($hotel['name'] ?? '')), 'UTF-8') !== $wanted || ($hotel['currency'] ?? '') !== 'EUR') continue;
+        $value = (float) ($hotel['totalPrice'] ?? 0);
+        if ($value > 0 && ($hotelPrice === null || $value < $hotelPrice)) $hotelPrice = $value;
+    }
+    if ($hotelPrice === null) throw new Exception('El mismo hotel no ofrece ahora una tarifa comparable.');
+    return (float) $flight['flightPrice'] + $hotelPrice;
+}
+
 foreach ($alerts as $alert) {
     try {
         $storedQuery = json_decode($alert['query_json'], true);
         if (!is_array($storedQuery)) throw new Exception('La configuración de la alerta no es válida.');
+        if ($alert['type'] === 'destination' && isset($storedQuery['startDate'], $storedQuery['endDate']) && (strtotime($storedQuery['endDate']) - strtotime($storedQuery['startDate'])) > 6 * 86400) {
+            $db->prepare('UPDATE alerts SET last_checked_at=?,next_check_at=?,last_status=?,last_error=?,updated_at=? WHERE id=?')->execute(array($now, $alert['expires_at'], 'needs_reconfiguration', 'La ventana anterior supera 7 días. Abre la búsqueda y crea una nueva alerta con una ventana válida.', $now, $alert['id']));
+            $errors[] = array('id' => (int) $alert['id'], 'error' => 'La ventana antigua necesita una configuración nueva.');
+            continue;
+        }
         $alertMode = $storedQuery['_alertMode'] ?? 'lower';
         $threshold = (float) ($storedQuery['_threshold'] ?? 0);
-        $legacyDestination = $alert['type'] === 'destination' && (int) ($storedQuery['_coverageVersion'] ?? 0) < 2;
+        $alertScope = $storedQuery['_alertScope'] ?? 'flight';
+        $plan = $storedQuery['_plan'] ?? null;
+        $legacyFlightPrice = in_array($alert['type'], array('destination', 'flight', 'combined'), true) && (int) ($storedQuery['_coverageVersion'] ?? 0) < 3;
         $query = $storedQuery;
-        unset($query['_alertMode'], $query['_threshold'], $query['_coverageVersion']);
+        unset($query['_alertMode'], $query['_threshold'], $query['_coverageVersion'], $query['_alertScope'], $query['_plan']);
         $price = null;
         if ($alert['type'] === 'flight') {
-            $price = vuelotel_lowest(vuelotel_internal_post('flights.php', $query), 'price');
+            $price = vuelotel_lowest(vuelotel_internal_post('flights.php', $query), 'price', true);
         } elseif ($alert['type'] === 'destination') {
             $destinationResult = vuelotel_internal_post('destination-search.php', $query, true);
-            if (empty($destinationResult['coverage']['complete'])) throw new Exception('La comparación de fechas sigue incompleta.');
-            $price = vuelotel_lowest($destinationResult, 'flightPrice');
+            if ($alertScope === 'plan') $price = vuelotel_plan_price($destinationResult, $query, $plan);
+            else {
+                if (empty($destinationResult['coverage']['complete'])) throw new Exception('La comparación de fechas sigue incompleta.');
+                $price = vuelotel_lowest($destinationResult, 'flightPrice', true);
+            }
         } elseif ($alert['type'] === 'hotel') {
             $price = vuelotel_lowest(vuelotel_internal_post('search.php?provider=serpapi', $query), 'totalPrice');
         } else {
-            $flightPrice = vuelotel_lowest(vuelotel_internal_post('flights.php', $query['flight'] ?? array()), 'price');
+            $flightPrice = vuelotel_lowest(vuelotel_internal_post('flights.php', $query['flight'] ?? array()), 'price', true);
             $hotelPrice = vuelotel_lowest(vuelotel_internal_post('search.php?provider=serpapi', $query['hotel'] ?? array()), 'totalPrice');
             if ($flightPrice !== null && $hotelPrice !== null) $price = $flightPrice + $hotelPrice;
         }
         if ($price === null) throw new Exception('No se encontró un precio comparable.');
-        // Old destination baselines came from the unsupported deals endpoint; reset only their baseline.
-        $old = $legacyDestination || $alert['last_price'] === null ? null : (float) $alert['last_price'];
+        // Earlier flight baselines used unselected outbound results. Start a new
+        // comparable baseline after confirming a return leg.
+        $old = $legacyFlightPrice || $alert['last_price'] === null ? null : (float) $alert['last_price'];
         $direction = $old === null ? 'initial' : ($price > $old ? 'up' : ($price < $old ? 'down' : 'same'));
         $notify = $old !== null && ($alert['type'] !== 'destination' ? $price !== $old : ($alertMode === 'threshold' ? $price <= $threshold && $old > $threshold : $price < $old));
         if ($notify) {
@@ -77,8 +109,8 @@ foreach ($alerts as $alert) {
             $db->prepare('INSERT INTO price_history(alert_id,price,currency,direction,checked_at) VALUES(?,?,?,?,?)')->execute(array($alert['id'], $price, $alert['currency'], $direction, $now));
             $changed++;
         }
-        if ($legacyDestination) {
-            $storedQuery['_coverageVersion'] = 2;
+        if ($legacyFlightPrice) {
+            $storedQuery['_coverageVersion'] = 3;
             $db->prepare('UPDATE alerts SET query_json=? WHERE id=?')->execute(array(json_encode($storedQuery, JSON_UNESCAPED_UNICODE), $alert['id']));
         }
         $db->prepare('UPDATE alerts SET last_price=?,last_checked_at=?,next_check_at=?,last_status=?,last_error=NULL,last_notified_at=?,updated_at=? WHERE id=?')->execute(array($price, $now, $now + (int) $alert['frequency_hours'] * 3600, $notify ? 'sent' : 'checked', $notify ? $now : $alert['last_notified_at'], $now, $alert['id']));

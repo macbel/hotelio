@@ -30,8 +30,9 @@ test('permite solo ida sin fecha de regreso',()=>{
 });
 
 test('valida el seguimiento flexible de un destino',()=>{
-  const query={origin:'MAD',destination:'FCO',startDate:'2026-10-01',endDate:'2026-12-15',minNights:7,adults:2,children:1,infants:0,carryOnBags:2,checkedBags:1};
+  const query={origin:'MAD',destination:'FCO',startDate:'2026-10-01',endDate:'2026-10-05',minNights:7,adults:2,children:1,infants:0,carryOnBags:2,checkedBags:1,maxBudget:null};
   assert.equal(validateDestinationQuery(query),'');
+  assert.match(validateDestinationQuery({...query,endDate:'2026-12-15'}),/hasta 7 días/);
   assert.match(validateDestinationQuery({...query,origin:'Madrid'}),/IATA/);
   assert.match(validateDestinationQuery({...query,endDate:'2026-09-01'}),/ventana/);
   assert.match(validateDestinationQuery({...query,checkedBags:4}),/maletas/);

@@ -27,7 +27,20 @@ if($action==='save_search'){
 }
 if($action==='create_alert'){
   $query=$body['query']??null;$frequency=(int)($body['frequencyHours']??24);$type=(string)($body['type']??'hotel');if(!is_array($query)||!in_array($frequency,array(12,24,72,168),true)||!in_array($type,array('hotel','flight','combined','destination'),true))vuelotel_json(400,array('error'=>'Alerta no válida.'));
-  if($type==='destination'){$mode=(string)($body['alertMode']??'lower');$threshold=(float)($body['threshold']??0);if(!in_array($mode,array('lower','threshold'),true)||($mode==='threshold'&&$threshold<=0))vuelotel_json(400,array('error'=>'Configura una condición de alerta válida.'));$query['_alertMode']=$mode;$query['_threshold']=$threshold;$query['_coverageVersion']=2;}
+  if($type==='destination'){
+    $mode=(string)($body['alertMode']??'lower');$threshold=(float)($body['threshold']??0);
+    if(!in_array($mode,array('lower','threshold'),true)||($mode==='threshold'&&$threshold<=0))vuelotel_json(400,array('error'=>'Configura una condición de alerta válida.'));
+    $scope=(string)($body['alertScope']??'flight');
+    if(!in_array($scope,array('flight','plan'),true))vuelotel_json(400,array('error'=>'El tipo de seguimiento no es válido.'));
+    $plan=$query['plans'][0]??null;
+    if($scope==='plan'){
+      if(!is_array($plan)||($plan['priceStatus']??'')!=='complete'||!preg_match('/^\d{4}-\d{2}-\d{2}$/',(string)($plan['departureDate']??''))||!preg_match('/^\d{4}-\d{2}-\d{2}$/',(string)($plan['returnDate']??''))||trim((string)($plan['hotel']['name']??''))===''||!is_numeric($plan['total']??null)||$plan['total']<=0)vuelotel_json(400,array('error'=>'Guarda primero un plan completo para seguir su precio.'));
+      $query['_plan']=array('departureDate'=>$plan['departureDate'],'returnDate'=>$plan['returnDate'],'destinationText'=>mb_substr((string)($plan['destinationText']??$query['destination']??''),0,120),'hotelName'=>mb_substr((string)$plan['hotel']['name'],0,180));
+    }
+    unset($query['plans'],$query['coverage'],$query['planCheckedAt']);
+    $query['_alertMode']=$mode;$query['_threshold']=$threshold;$query['_alertScope']=$scope;
+  }
+  if(in_array($type,array('destination','flight','combined'),true))$query['_coverageVersion']=3;
   $count=$db->prepare('SELECT COUNT(*) FROM alerts WHERE user_id=? AND active=1 AND expires_at>?');$count->execute(array($user['id'],$now));if((int)$count->fetchColumn()>=(int)vuelotel_setting('max_alerts_per_user','5'))vuelotel_json(409,array('error'=>'Has alcanzado el máximo de 5 alertas activas.'));
   $label=trim((string)($body['label']??'Alerta de precio'));$db->prepare('INSERT INTO alerts(user_id,saved_search_id,type,label,query_json,frequency_hours,last_price,currency,next_check_at,expires_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array($user['id'],isset($body['savedSearchId'])?(int)$body['savedSearchId']:null,$type,mb_substr($label,0,120),json_encode($query,JSON_UNESCAPED_UNICODE),$frequency,isset($body['price'])?(float)$body['price']:null,(string)($body['currency']??'EUR'),$now+$frequency*3600,$now+604800,1,$now,$now));vuelotel_json(201,array('id'=>(int)$db->lastInsertId(),'expiresAt'=>$now+604800));
 }

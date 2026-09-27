@@ -229,8 +229,9 @@ function renderFlightResult(option,index){
         <span><strong>${esc(flightTimeLabel(arrival))}</strong><small>${esc(arrival.airport||'Destino')}</small></span>
       </div>
       <div class="flight-meta"><span>${esc(formatDuration(option.durationMinutes))}</span><span>${esc(stopLabel(option.stops))}</span></div>
-      <div class="flight-result-price"><strong>${esc(formatMoney(option.price,option.currency))}</strong><small>Precio mostrado por Google Flights</small></div>
+      <div class="flight-result-price"><strong>${esc(formatMoney(option.price,option.currency))}</strong><small>${option.priceStatus==='complete'?'Ida y vuelta seleccionadas · confirmar tarifa':'Salida vista · vuelta pendiente'}</small></div>
     </div>
+    ${option.returnLeg?`<p class="flight-info">Vuelta: ${esc(option.returnLeg.departure?.airport||'—')} → ${esc(option.returnLeg.arrival?.airport||'—')} · ${esc(stopLabel(option.returnLeg.stops))}</p>`:''}
     ${segments.length>1?`<details><summary>Ver trayecto</summary><ol>${segments.map(segment=>`<li>${esc(segment.departure?.airport||'—')} → ${esc(segment.arrival?.airport||'—')} · ${esc(segment.airline||'Compañía por confirmar')} ${esc(segment.flightNumber||'')}</li>`).join('')}</ol></details>`:''}
   </article>`;
 }
@@ -238,7 +239,7 @@ function renderFlightResult(option,index){
 function renderFlightResponse(output,body,query){
   const searchUrl=safeGoogleFlightsUrl(body.searchUrl),results=Array.isArray(body.results)?body.results:[];
   if(!searchUrl)throw new Error('La respuesta no incluye un enlace seguro de Google Flights.');
-  const roundtripNote=query.tripType==='roundtrip'?'<p class="flight-info">Estas son opciones iniciales de salida. Google Flights completa allí la selección de la vuelta y recalcula el precio final.</p>':'';
+  const roundtripNote=query.tripType==='roundtrip'?'<p class="flight-info">Solo la opción marcada “Ida y vuelta seleccionadas” incluye una vuelta comprobada. El resto son salidas pendientes de completar.</p>':'';
   const usage=Number.isFinite(Number(body.limits?.hourlyRemaining))?`<span class="flight-usage">${Number(body.limits.hourlyRemaining)} búsquedas disponibles durante esta hora</span>`:'';
   output.innerHTML=`
     <div class="flight-results-head"><div><span class="eyebrow">Google Flights vía SerpApi</span><h3>${results.length?`${results.length} opciones encontradas`:'Continúa en Google Flights'}</h3></div>${body.cached?'<span class="flight-cache">Resultado reciente</span>':''}</div>
@@ -269,23 +270,28 @@ function validateDestinationQuery(query){
   if(!/^[A-Z]{3}$/.test(query.origin)||!/^[A-Z]{3}$/.test(query.destination))return 'Escribe un origen y un destino y elige una sugerencia, o introduce sus códigos IATA.';
   if(query.origin===query.destination)return 'El origen y el destino deben ser distintos.';
   if(!/^\d{4}-\d{2}-\d{2}$/.test(query.startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(query.endDate)||query.endDate<query.startDate)return 'La ventana de salida no es válida.';
+  if((new Date(query.endDate)-new Date(query.startDate))/86400000>6)return 'Elige una ventana de salida de hasta 7 días para controlar el coste de la comparación.';
   if(query.minNights<1||query.minNights>30)return 'La estancia debe ser de entre 1 y 30 noches.';
   if(query.adults<1||query.adults+query.children+query.infants>9)return 'La búsqueda admite entre 1 y 9 pasajeros.';
   if(query.infants>query.adults)return 'Debe viajar al menos un adulto por cada bebé.';
   if(query.carryOnBags<0||query.checkedBags<0||query.carryOnBags+query.checkedBags>query.adults+query.children+query.infants)return 'Las maletas no pueden superar el número de pasajeros.';
+  if(query.maxBudget!==null&&(!Number.isFinite(query.maxBudget)||query.maxBudget<1))return 'El presupuesto debe ser mayor que cero.';
   return '';
 }
 
-function renderDestinationResults(output,body,query,city){
+function renderDestinationResults(output,body,query,city,plans=[],hotelNotice=''){
   const results=Array.isArray(body.results)?body.results:[];
   const coverage=body.coverage||{},checked=Number(coverage.checked)||0,total=Number(coverage.total)||0,remaining=Number(coverage.remaining)||0,complete=coverage.complete===true;
   const baggageNotice=query.checkedBags>0?`<p class="flight-info">Has indicado ${query.checkedBags} maleta${query.checkedBags===1?' facturada':'s facturadas'}. La preferencia se guarda con el seguimiento; el coste exacto de equipaje se confirma en la web de compra.</p>`:'';
+  const planCards=plans.length?`<section class="radar-plans"><div class="flight-results-head"><div><span class="eyebrow">Radar de escapadas</span><h3>${plans.length} ${plans.length===1?'plan comparable':'planes comparables'}</h3></div></div><p class="flight-info">${esc(plans.length)} fecha${plans.length===1?'':'s'} con ida, vuelta y hotel comprobados. El menor precio se refiere solo a estas opciones, no a toda la ventana.</p>${plans.map((plan,index)=>`<article class="radar-plan"><div><span class="eyebrow">${index===0?'Menor subtotal comprobado':'Alternativa de fechas'}</span><h4>${esc(formatDate(plan.departureDate))} → ${esc(formatDate(plan.returnDate))}</h4><p>${esc(plan.airline||'Vuelo')} · ${esc(plan.hotel.name||'Alojamiento')}</p><small>${esc(plan.hotel.provider||'Proveedor')} · vuelo comprobado ${esc(new Date(plan.checkedAt).toLocaleString('es-ES'))}</small></div><div class="radar-plan-price"><strong>${esc(formatMoney(plan.total,'EUR'))}</strong><small>Vuelo ${esc(formatMoney(plan.flightPrice,'EUR'))} + hotel ${esc(formatMoney(plan.hotel.totalPrice,'EUR'))}</small><small>${query.checkedBags>0?'Subtotal sin maletas facturadas':'Precio orientativo; confirma tasas y condiciones'}</small><div class="radar-plan-links">${safeGoogleFlightsUrl(plan.flightLink)?`<a href="${esc(safeGoogleFlightsUrl(plan.flightLink))}" target="_blank" rel="noopener noreferrer">Comprobar vuelo ↗</a>`:''}${safeOfferUrl(plan.hotel.url)?`<a href="${esc(safeOfferUrl(plan.hotel.url))}" target="_blank" rel="noopener noreferrer">Comprobar hotel ↗</a>`:''}</div></div></article>`).join('')}</section>`:`<p class="flight-info">${esc(hotelNotice||'Aún no hay planes con vuelo completo y hotel para las fechas comprobadas.')}</p>`;
   output.innerHTML=`<div class="flight-results-head"><div><span class="eyebrow">Seguimiento de destino · ${esc(city||query.destination)}</span><h3>${results.length?`${results.length} fechas ordenadas por precio`:'Aún sin precios para las fechas comparadas'}</h3></div>${body.cached?'<span class="flight-cache">Resultado reciente</span>':''}</div>
     <p class="destination-coverage" role="status"><strong>${checked} de ${total} fechas comprobadas</strong>${complete?' · Ventana completa':` · ${remaining} pendientes`}</p>
     <p class="flight-info">${esc(body.notice||'Precios orientativos verificados en la última consulta.')}${Number(body.retryAfter)>0?` Vuelve en unos ${Math.ceil(Number(body.retryAfter)/60)} minutos.`:''}</p>${baggageNotice}
     ${remaining>0?'<button class="flight-submit destination-more" type="button">Comparar más fechas →</button>':''}
-    ${results.length?`<div class="flight-deal-list">${results.map(item=>`<article class="flight-deal destination-deal"><div><span class="flight-deal-code">${esc(item.destinationCode)}</span><h4>${esc(city||item.destinationName||query.destination)}</h4><p>${esc(item.airline||'Compañía por confirmar')}${Number.isFinite(Number(item.stops))?` · ${esc(stopLabel(item.stops))}`:''}</p></div><div class="flight-deal-dates"><strong>${esc(formatDate(item.departureDate))} → ${esc(formatDate(item.returnDate))}</strong><span>${nightsBetween(item.departureDate,item.returnDate)} noches · ${query.adults+query.children+query.infants} pasajeros</span></div><div class="flight-deal-price"><span><small>Vuelo desde</small><strong>${esc(formatMoney(item.flightPrice,item.currency))}</strong></span>${safeGoogleFlightsUrl(item.flightLink)?`<a href="${esc(safeGoogleFlightsUrl(item.flightLink))}" target="_blank" rel="noopener noreferrer">Ver oferta ↗</a>`:''}</div></article>`).join('')}</div>`:'<div class="flight-empty">Aún no hay un precio verificable para este destino y las fechas comparadas.</div>'}`;
+    ${planCards}${results.length?`<details class="radar-flight-dates"><summary>Ver fechas de vuelo comprobadas</summary><div class="flight-deal-list">${results.map(item=>`<article class="flight-deal destination-deal"><div><span class="flight-deal-code">${esc(item.destinationCode)}</span><h4>${esc(city||item.destinationName||query.destination)}</h4><p>${esc(item.airline||'Compañía por confirmar')}${Number.isFinite(Number(item.stops))?` · ${esc(stopLabel(item.stops))}`:''}</p></div><div class="flight-deal-dates"><strong>${esc(formatDate(item.departureDate))} → ${esc(formatDate(item.returnDate))}</strong><span>${nightsBetween(item.departureDate,item.returnDate)} noches · ${query.adults+query.children+query.infants} pasajeros</span></div><div class="flight-deal-price"><span><small>Ida y vuelta</small><strong>${esc(formatMoney(item.flightPrice,item.currency))}</strong></span>${safeGoogleFlightsUrl(item.flightLink)?`<a href="${esc(safeGoogleFlightsUrl(item.flightLink))}" target="_blank" rel="noopener noreferrer">Ver vuelo ↗</a>`:''}</div></article>`).join('')}</div></details>`:'<div class="flight-empty">Aún no hay un precio verificable para este destino y las fechas comparadas.</div>'}`;
 }
+
+function safeOfferUrl(value){try{const url=new URL(value);return url.protocol==='https:'&&url.hostname.includes('.')?url.href:''}catch{return ''}}
 
 /**
  * Inserta y activa el MVP de vuelos dentro de un elemento existente.
@@ -346,7 +352,7 @@ export function mountFlightSearch(container,options={}){
           <label class="flight-field"><span>Origen</span><input name="origin" list="${instanceId}FollowOrigin" required autocomplete="off" placeholder="Ciudad, aeropuerto o IATA" value="${esc(defaults.origin||'')}"></label>
           <label class="flight-field"><span>Destino</span><input name="destination" list="${instanceId}FollowDestination" required autocomplete="off" placeholder="Ciudad, aeropuerto o IATA"></label>
           <label class="flight-field"><span>Salida desde</span><input name="startDate" type="date" required min="${localIso(today)}" value="${localIso(addDays(today,30))}"></label>
-          <label class="flight-field"><span>Salida hasta</span><input name="endDate" type="date" required min="${localIso(addDays(today,1))}" value="${localIso(addDays(today,90))}"></label>
+          <label class="flight-field"><span>Salida hasta</span><input name="endDate" type="date" required min="${localIso(addDays(today,1))}" value="${localIso(addDays(today,33))}"></label>
           <label class="flight-field"><span>Noches</span><select name="minNights">${Array.from({length:14},(_,index)=>`<option value="${index+1}" ${index===6?'selected':''}>${index+1} ${index===0?'noche':'noches'}</option>`).join('')}</select></label>
         </div>
         <div class="flight-grid flight-grid-options destination-options">
@@ -355,10 +361,11 @@ export function mountFlightSearch(container,options={}){
           <label class="flight-field"><span>Bebés</span><select name="infants">${Array.from({length:9},(_,index)=>`<option value="${index}">${index}</option>`).join('')}</select></label>
           <label class="flight-field"><span>Maletas de mano</span><select name="carryOnBags">${Array.from({length:10},(_,index)=>`<option value="${index}">${index}</option>`).join('')}</select></label>
           <label class="flight-field"><span>Maletas facturadas</span><select name="checkedBags">${Array.from({length:10},(_,index)=>`<option value="${index}">${index}</option>`).join('')}</select></label>
+          <label class="flight-field"><span>Presupuesto total (€)</span><input name="maxBudget" type="number" min="1" step="1" placeholder="Opcional"></label>
           <button class="flight-submit" type="submit">Buscar fechas baratas →</button>
         </div>
       </form>
-      <p class="flight-iata-help">Puedes usar ciudades o aeropuertos. Las maletas facturadas se tienen en cuenta como preferencia; su coste se confirmará al comprar.</p>
+      <p class="flight-iata-help">Compara hasta 7 días de salida con las mismas noches. Cada fecha necesita dos consultas de vuelos. Las maletas facturadas se guardan como preferencia y su coste se confirma al comprar.</p>
       <div class="flight-destination-output" aria-live="polite"></div>
     </section><datalist id="${instanceId}ExploreOrigin"></datalist><datalist id="${instanceId}FollowOrigin"></datalist><datalist id="${instanceId}FollowDestination"></datalist>
   </section>`;
@@ -439,13 +446,38 @@ export function mountFlightSearch(container,options={}){
     }
   };
 
+  const hotelByDate=new Map();
   const readDestinationQuery=()=>{
     const data=new FormData(destinationForm);return {
       origin:resolveAirportCode(data.get('origin'),airports),destination:resolveAirportCode(data.get('destination'),airports),
       startDate:String(data.get('startDate')||''),endDate:String(data.get('endDate')||''),minNights:Number(data.get('minNights')),
       adults:Number(data.get('adults')),children:Number(data.get('children')),infants:Number(data.get('infants')),
-      carryOnBags:Number(data.get('carryOnBags')),checkedBags:Number(data.get('checkedBags')),travelClass:'economy',stops:'any'
+      carryOnBags:Number(data.get('carryOnBags')),checkedBags:Number(data.get('checkedBags')),maxBudget:data.get('maxBudget')===''?null:Number(data.get('maxBudget')),travelClass:'economy',stops:'any'
     }};
+  const comparablePlans=async(body,query,city)=>{
+    const departures=(body.results||[]).filter(item=>item.priceStatus==='complete'&&Number(item.flightPrice)>0).sort((a,b)=>a.flightPrice-b.flightPrice).slice(0,2);
+    if(!departures.length)return {plans:[],notice:'No se confirmó aún una ida y vuelta para estas fechas.'};
+    const providers=await (options.providersPromise||Promise.resolve([]));
+    const provider=providers.find(item=>item.enabled&&item.id==='serpapi');
+    if(!provider)return {plans:[],notice:'Los planes con hotel necesitan que Google Hotels esté habilitado. Los vuelos comprobados siguen disponibles abajo.'};
+    const failures=[];
+    const plans=await Promise.all(departures.map(async flight=>{
+      const hotelQuery={destination:city||query.destination,checkIn:flight.departureDate,checkOut:flight.returnDate,adults:query.adults,children:query.children,childrenAges:Array(query.children).fill(8),guests:query.adults+query.children,rooms:1,minPrice:null,maxPrice:null,accommodationType:'any',board:'any',currency:'EUR',nights:query.minNights};
+      const key=JSON.stringify(hotelQuery),cached=hotelByDate.get(key);
+      let hotels;
+      if(cached&&cached.at>Date.now()-3600000)hotels=cached.hotels;
+      else {
+        try{const response=await searchPublicProvider(provider,hotelQuery);hotels=response.results||[];hotelByDate.set(key,{at:Date.now(),hotels})}
+        catch(error){failures.push(error.message||'No se pudo consultar el hotel.');return null}
+      }
+      const hotel=hotels.filter(item=>item.persistable!==false&&Number(item.totalPrice)>0&&item.currency==='EUR'&&safeOfferUrl(item.url)).sort((a,b)=>a.totalPrice-b.totalPrice)[0];
+      if(!hotel)return null;
+      const total=Number(flight.flightPrice)+Number(hotel.totalPrice);
+      if(query.maxBudget!==null&&total>query.maxBudget)return null;
+      return {departureDate:flight.departureDate,returnDate:flight.returnDate,destinationText:city||query.destination,flightPrice:Number(flight.flightPrice),flightLink:flight.flightLink,airline:flight.airline,priceStatus:'complete',hotel:{name:hotel.name,totalPrice:Number(hotel.totalPrice),currency:'EUR',provider:hotel.provider,url:hotel.url,rating:hotel.rating,location:hotel.location},total,currency:'EUR',checkedAt:flight.checkedAt||new Date().toISOString(),hotelCheckedAt:new Date().toISOString()};
+    }));
+    return {plans:plans.filter(Boolean).sort((a,b)=>a.total-b.total),notice:failures[0]||(query.maxBudget!==null?'Ningún plan comprobado entra en el presupuesto indicado.':'No se recibió una oferta de hotel comparable para las fechas de vuelo comprobadas.')};
+  };
   const runDestination=async(query,continueSearch=false)=>{
     const validation=validateDestinationQuery(query);
     if(validation){destinationOutput.innerHTML=`<div class="flight-error">${esc(validation)}</div>`;return}
@@ -454,10 +486,13 @@ export function mountFlightSearch(container,options={}){
     const button=continueSearch?destinationOutput.querySelector('.destination-more'):destinationForm.querySelector('.flight-submit');button.disabled=true;button.textContent='Comparando…';if(!continueSearch)destinationOutput.innerHTML='<div class="flight-loading"><i></i><i></i><i></i><span>Comparando fechas dentro de tu ventana…</span></div>';
     try{
       const body=await searchDestination(query,{endpoint:options.destinationEndpoint||defaultDestinationSearchEndpoint(),signal:requestController.signal,continueSearch});
-      renderDestinationResults(destinationOutput,body,query,airports.find(airport=>airport.iata===query.destination)?.city);
+      const city=airports.find(airport=>airport.iata===query.destination)?.city;
+      const {plans,notice}=await comparablePlans(body,query,city);
+      if(destinationController!==requestController)return;
+      renderDestinationResults(destinationOutput,body,query,city,plans,notice);
       destinationOutput.querySelector('.destination-more')?.addEventListener('click',()=>runDestination(query,true));
       const cheapest=body.coverage?.complete?(body.results||[]).filter(item=>Number(item.flightPrice)>0).sort((a,b)=>a.flightPrice-b.flightPrice)[0]:null;
-      window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'destination',label:`Seguir ${query.destination} desde ${query.origin}`,query,price:cheapest?.flightPrice??null,currency:cheapest?.currency||'EUR'}}));
+      window.dispatchEvent(new CustomEvent('vuelotel:search-complete',{detail:{type:'destination',label:`Seguir ${query.destination} desde ${query.origin}`,query:{...query,plans,coverage:body.coverage,planCheckedAt:new Date().toISOString()},price:cheapest?.flightPrice??null,currency:cheapest?.currency||'EUR'}}));
     }catch(error){
       if(error.name!=='AbortError'){const message=`<div class="flight-error"><strong>No se pudieron buscar fechas.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`;if(continueSearch)destinationOutput.insertAdjacentHTML('beforeend',message);else destinationOutput.innerHTML=message}
     }finally{
@@ -479,3 +514,4 @@ export function mountFlightSearch(container,options={}){
 }
 
 export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,searchDestination,showResolvedAirport,validateFlightQuery,validateDestinationQuery};
+import {searchPublicProvider} from './providers.js?v=1.2.2';
