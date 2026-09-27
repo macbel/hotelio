@@ -13,7 +13,7 @@ check($params['adults'] === 2 && $params['children'] === 1 && $params['bags'] ==
 $flight = function($arrival) { return array('departure_airport' => array('id' => 'MAD'), 'arrival_airport' => array('id' => $arrival), 'airline' => 'Test Air'); };
 $response = array('search_metadata' => array('google_flights_url' => 'https://www.google.com/travel/flights/search?example=1'), 'best_flights' => array(array('price' => 60, 'flights' => array($flight('CDG'))), array('price' => 125, 'flights' => array($flight('FCO'))), array('price' => 90, 'flights' => array($flight('FCO')))));
 $best = destination_best($response, $query, '2026-11-15', '2026-11-22');
-check($best['destinationCode'] === 'FCO' && $best['flightPrice'] === 90.0, 'A cheaper flight to a different destination must be discarded.');
+check($best['destinationCode'] === 'FCO' && $best['outboundDisplayedPrice'] === 90.0 && $best['flightPrice'] === null, 'A cheaper outbound flight to a different destination must be discarded, and an outbound price is not a round-trip total.');
 check($best['departureDate'] === '2026-11-15' && $best['returnDate'] === '2026-11-22', 'The result must retain the verified dates.');
 check($best['flightLink'] === 'https://www.google.com/travel/flights/search?example=1', 'Only safe Google Flights links are accepted.');
 $response['search_metadata']['google_flights_url'] = 'https://example.test/travel/flights';
@@ -23,4 +23,10 @@ $dates = destination_dates(destination_date('2026-11-15'), destination_date('202
 check(count($dates) === 4 && count(array_unique($dates)) === 4, 'Every departure date must be visited exactly once.');
 $payload = destination_payload($query, array('checked' => array($dates[0] => 1, $dates[1] => 1), 'results' => array($dates[0] => $best)), $dates, 'Partial', false);
 check($payload['coverage'] === array('checked' => 2, 'total' => 4, 'remaining' => 2, 'complete' => false), 'Partial coverage must be explicit.');
+
+$direct = array(array('departure_airport' => array('time' => '2026-11-15 09:10')));
+$early = array(array('departure_airport' => array('time' => '2026-11-15 06:10')));
+check(destination_option_matches($direct, array('stops' => 'nonstop', 'noEarlyDeparture' => true)), 'A direct flight after 08:00 should match.');
+check(!destination_option_matches($early, array('stops' => 'any', 'noEarlyDeparture' => true)), 'An early departure must be excluded.');
+check(!destination_option_matches(array($direct[0], $direct[0]), array('stops' => 'nonstop')), 'A connection must be excluded by the nonstop filter.');
 echo "Destination search contract passed.\n";

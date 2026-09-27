@@ -11,6 +11,28 @@ if($method==='GET'){
 }
 if($method!=='POST')vuelotel_json(405,array('error'=>'Método no permitido.'));
 $body=vuelotel_body();$action=(string)($body['action']??'');$kind=(string)($body['kind']??'');$now=time();
+function vuelotel_alert_expiry($value,$now){
+  if(!is_string($value)||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$value))vuelotel_json(400,array('error'=>'Indica una fecha de caducidad válida.'));
+  $date=DateTimeImmutable::createFromFormat('!Y-m-d',$value,new DateTimeZone('UTC'));
+  if(!$date||$date->format('Y-m-d')!==$value)vuelotel_json(400,array('error'=>'Indica una fecha de caducidad válida.'));
+  $expires=$date->getTimestamp()+86399;
+  if($expires<=$now||$expires>$now+366*86400)vuelotel_json(400,array('error'=>'La caducidad debe ser futura y estar dentro del próximo año.'));
+  return $expires;
+}
+if($action==='update_alert'){
+  $id=(int)($body['id']??0);$frequency=(int)($body['frequencyHours']??0);
+  if($id<1||!in_array($frequency,array(12,24,72,168),true))vuelotel_json(400,array('error'=>'Frecuencia de alerta no válida.'));
+  $expires=vuelotel_alert_expiry($body['expiresDate']??null,$now);
+  if($expires<=$now+$frequency*3600)vuelotel_json(400,array('error'=>'La caducidad debe ser posterior a la próxima comprobación.'));
+  $statement=$db->prepare('SELECT id,active,expires_at FROM alerts WHERE id=? AND user_id=?');$statement->execute(array($id,$user['id']));$existing=$statement->fetch();
+  if(!$existing)vuelotel_json(404,array('error'=>'No se encontró esta alerta.'));
+  $expired=(int)$existing['active']!==1||(int)$existing['expires_at']<=$now;
+  if($expired&&($body['reactivate']??false)!==true)vuelotel_json(409,array('error'=>'Para reactivar una alerta caducada, confirma la reactivación.'));
+  if($expired){$count=$db->prepare('SELECT COUNT(*) FROM alerts WHERE user_id=? AND active=1 AND expires_at>?');$count->execute(array($user['id'],$now));if((int)$count->fetchColumn()>=(int)vuelotel_setting('max_alerts_per_user','5'))vuelotel_json(409,array('error'=>'Has alcanzado el máximo de alertas activas.'));}
+  $next=$now+$frequency*3600;
+  $db->prepare('UPDATE alerts SET frequency_hours=?,expires_at=?,next_check_at=?,active=1,last_price=CASE WHEN ? THEN NULL ELSE last_price END,last_status=CASE WHEN ? THEN NULL ELSE last_status END,last_error=CASE WHEN ? THEN NULL ELSE last_error END,updated_at=? WHERE id=? AND user_id=?')->execute(array($frequency,$expires,$next,$expired?1:0,$expired?1:0,$expired?1:0,$now,$id,$user['id']));
+  vuelotel_json(200,array('ok'=>true,'expiresAt'=>$expires,'nextCheckAt'=>$next));
+}
 if($action==='delete'){
   $tables=array('favorite'=>'favorites','search'=>'saved_searches','alert'=>'alerts');if(!isset($tables[$kind]))vuelotel_json(400,array('error'=>'Tipo no válido.'));
   $statement=$db->prepare('DELETE FROM '.$tables[$kind].' WHERE id=? AND user_id=?');$statement->execute(array((int)($body['id']??0),$user['id']));vuelotel_json(200,array('ok'=>true));
@@ -27,6 +49,8 @@ if($action==='save_search'){
 }
 if($action==='create_alert'){
   $query=$body['query']??null;$frequency=(int)($body['frequencyHours']??24);$type=(string)($body['type']??'hotel');if(!is_array($query)||!in_array($frequency,array(12,24,72,168),true)||!in_array($type,array('hotel','flight','combined','destination'),true))vuelotel_json(400,array('error'=>'Alerta no válida.'));
+  $expires=vuelotel_alert_expiry($body['expiresDate']??gmdate('Y-m-d',$now+604800),$now);
+  if($expires<=$now+$frequency*3600)vuelotel_json(400,array('error'=>'La caducidad debe ser posterior a la primera comprobación.'));
   if($type==='destination'){
     $mode=(string)($body['alertMode']??'lower');$threshold=(float)($body['threshold']??0);
     if(!in_array($mode,array('lower','threshold'),true)||($mode==='threshold'&&$threshold<=0))vuelotel_json(400,array('error'=>'Configura una condición de alerta válida.'));
@@ -42,6 +66,6 @@ if($action==='create_alert'){
   }
   if(in_array($type,array('destination','flight','combined'),true))$query['_coverageVersion']=3;
   $count=$db->prepare('SELECT COUNT(*) FROM alerts WHERE user_id=? AND active=1 AND expires_at>?');$count->execute(array($user['id'],$now));if((int)$count->fetchColumn()>=(int)vuelotel_setting('max_alerts_per_user','5'))vuelotel_json(409,array('error'=>'Has alcanzado el máximo de 5 alertas activas.'));
-  $label=trim((string)($body['label']??'Alerta de precio'));$db->prepare('INSERT INTO alerts(user_id,saved_search_id,type,label,query_json,frequency_hours,last_price,currency,next_check_at,expires_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array($user['id'],isset($body['savedSearchId'])?(int)$body['savedSearchId']:null,$type,mb_substr($label,0,120),json_encode($query,JSON_UNESCAPED_UNICODE),$frequency,isset($body['price'])?(float)$body['price']:null,(string)($body['currency']??'EUR'),$now+$frequency*3600,$now+604800,1,$now,$now));vuelotel_json(201,array('id'=>(int)$db->lastInsertId(),'expiresAt'=>$now+604800));
+  $label=trim((string)($body['label']??'Alerta de precio'));$db->prepare('INSERT INTO alerts(user_id,saved_search_id,type,label,query_json,frequency_hours,last_price,currency,next_check_at,expires_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute(array($user['id'],isset($body['savedSearchId'])?(int)$body['savedSearchId']:null,$type,mb_substr($label,0,120),json_encode($query,JSON_UNESCAPED_UNICODE),$frequency,isset($body['price'])?(float)$body['price']:null,(string)($body['currency']??'EUR'),$now+$frequency*3600,$expires,1,$now,$now));vuelotel_json(201,array('id'=>(int)$db->lastInsertId(),'expiresAt'=>$expires));
 }
 vuelotel_json(400,array('error'=>'Acción no válida.'));

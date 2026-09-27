@@ -20,7 +20,10 @@ function hotelio_default_config() {
         'mail' => array('from' => 'no-reply@alufi.es'),
         'providers' => array(
             'stay22' => array('enabled' => true, 'aid' => 'hotelio'),
-            'serpapi' => array('enabled' => false, 'api_key' => '')
+            'serpapi' => array('enabled' => false, 'api_key' => ''),
+            // Reservado para una integración futura de Aviasales Data API.
+            // El token solo se lee de configuración privada del servidor.
+            'aviasales' => array('enabled' => false, 'api_token' => '', 'cache_ttl' => 86400)
         )
     );
 }
@@ -50,7 +53,7 @@ function hotelio_config() {
             }
             if (isset($stored['alerts']) && is_array($stored['alerts'])) $config['alerts'] = array_merge($config['alerts'], $stored['alerts']);
             if (isset($stored['mail']) && is_array($stored['mail'])) $config['mail'] = array_merge($config['mail'], $stored['mail']);
-            foreach (array('stay22', 'serpapi') as $provider) {
+            foreach (array('stay22', 'serpapi', 'aviasales') as $provider) {
                 if (isset($stored['providers'][$provider]) && is_array($stored['providers'][$provider])) {
                     $config['providers'][$provider] = array_merge($config['providers'][$provider], $stored['providers'][$provider]);
                 }
@@ -64,6 +67,9 @@ function hotelio_config() {
     }
     $config['providers']['stay22']['aid'] = 'hotelio';
     $config['providers']['serpapi']['enabled'] = !empty($config['providers']['serpapi']['enabled']) && trim((string) $config['providers']['serpapi']['api_key']) !== '';
+    // No activar hasta que exista un adaptador de precios y condiciones validado.
+    $config['providers']['aviasales']['enabled'] = false;
+    $config['providers']['aviasales']['cache_ttl'] = max(3600, min(604800, (int) $config['providers']['aviasales']['cache_ttl']));
     $config['flights']['enabled'] = !empty($config['flights']['enabled']);
     $config['flights']['cache_ttl'] = max(300, min(86400, (int) $config['flights']['cache_ttl']));
     $config['flights']['monthly_limit'] = max(1, min(240, (int) $config['flights']['monthly_limit']));

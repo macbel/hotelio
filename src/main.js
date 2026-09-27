@@ -1,7 +1,8 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.3.0';
-import {mountCombinedSearch} from './combined.js?v=2.3.0';
-import {mountAccount} from './account.js?v=2.3.0';
+import {mountFlightSearch} from './flights.js?v=2.4.0';
+import {mountCombinedSearch} from './combined.js?v=2.4.0';
+import {mountAccount} from './account.js?v=2.4.0';
+import {readRadarShare} from './radar-plans.js?v=2.4.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -89,7 +90,9 @@ const openSavedSearch=event=>{
   if(saved.type==='destination'){
     setTravelView('flights');
     const form=document.querySelector('#flightView .flight-destination-form');
-    ['origin','destination','startDate','endDate','minNights','adults','children','infants','carryOnBags','checkedBags','maxBudget'].forEach(name=>setField(form,name,filters[name]));
+    ['origin','destination','startDate','endDate','minNights','adults','children','infants','carryOnBags','checkedBags','maxBudget','stops'].forEach(name=>setField(form,name,filters[name]));
+    if(Array.isArray(filters.destinations)){['destination','destination2','destination3'].forEach((name,index)=>setField(form,name,filters.destinations[index]||''))}
+    if(form?.elements?.noEarlyDeparture)form.elements.noEarlyDeparture.checked=filters.noEarlyDeparture===true;
     const plans=Array.isArray(filters.plans)?filters.plans:[],output=document.querySelector('#flightView .flight-destination-output');
     if(output&&plans.length){output.innerHTML=`<aside class="flight-info"><strong>Planes guardados · precios de referencia</strong>${plans.map(plan=>`<p>${esc(plan.departureDate)} → ${esc(plan.returnDate)} · ${esc(plan.hotel?.name||'Hotel')} · ${esc(money(plan.total,plan.currency||'EUR'))} <a href="${esc(safeSelectionUrl(plan.flightLink,true))}" target="_blank" rel="noopener noreferrer">Vuelo ↗</a> <a href="${esc(safeSelectionUrl(plan.hotel?.url))}" target="_blank" rel="noopener noreferrer">Hotel ↗</a></p>`).join('')}<small>Consulta de nuevo para comprobar disponibilidad y precio actual.</small></aside>`}
     form?.scrollIntoView({behavior:'smooth',block:'start'});return;
@@ -126,6 +129,13 @@ window.addEventListener('vuelotel:open-saved-search',openSavedSearch);
 const money = (value, currency='EUR') => new Intl.NumberFormat('es-ES',{style:'currency',currency,maximumFractionDigits:0}).format(value);
 const nightsBetween = (a,b) => Math.max(1, Math.round((new Date(b)-new Date(a))/86400000));
 const esc = text => String(text ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const sharedPlan=readRadarShare(location.hash);
+if(sharedPlan){
+  const banner=document.createElement('aside');banner.className='flight-info shared-radar-plan';
+  banner.innerHTML=`<strong>Plan compartido · precio de referencia</strong><p>${esc(sharedPlan.destination)} · ${esc(sharedPlan.departureDate)} → ${esc(sharedPlan.returnDate)} · ${esc(sharedPlan.hotelName)} · ${esc(money(sharedPlan.total,'EUR'))}</p><small>Resumen guardado al compartir. Busca de nuevo para comprobar disponibilidad y precio actual.</small>`;
+  document.querySelector('#flightView .flight-search')?.prepend(banner);
+  const snapshotHash=location.hash;setTravelView('flights');history.replaceState(null,'',location.pathname+location.search+snapshotHash);
+}
 const whatsappUrl=text=>`https://wa.me/?text=${encodeURIComponent(text)}`;
 const newId=()=>crypto.randomUUID?.()||`hotel-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const normalized=text=>String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-');
@@ -354,4 +364,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=18'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=19'));

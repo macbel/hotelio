@@ -37,6 +37,10 @@ test('valida el seguimiento flexible de un destino',()=>{
   assert.match(validateDestinationQuery({...query,endDate:'2026-09-01'}),/ventana/);
   assert.match(validateDestinationQuery({...query,checkedBags:4}),/maletas/);
   assert.match(validateDestinationQuery({...query,infants:3,adults:2}),/adulto/);
+  assert.equal(validateDestinationQuery({...query,destinations:['FCO','LHR','CDG'],stops:'nonstop',noEarlyDeparture:true}), '');
+  assert.match(validateDestinationQuery({...query,destinations:['FCO','FCO']}),/distintos/);
+  assert.match(validateDestinationQuery({...query,destinations:['FCO','LHR','CDG','JFK']}),/entre uno y tres/);
+  assert.match(validateDestinationQuery({...query,stops:'two'}),/escalas/);
 });
 
 test('resuelve ciudad, aeropuerto seleccionado y código IATA',()=>{

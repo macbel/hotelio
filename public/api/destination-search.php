@@ -68,6 +68,19 @@ function destination_params($query, $departure, $return, $apiKey) {
     return $params;
 }
 
+function destination_option_matches($legs, $query) {
+    if (!is_array($legs) || !$legs) return false;
+    $stops = max(0, count($legs) - 1);
+    if (($query['stops'] ?? 'any') === 'nonstop' && $stops > 0) return false;
+    if (($query['stops'] ?? 'any') === 'up_to_one' && $stops > 1) return false;
+    if (!empty($query['noEarlyDeparture'])) {
+        $time = (string) ($legs[0]['departure_airport']['time'] ?? '');
+        // The provider uses local airport time. Unknown time cannot verify this preference.
+        if (!preg_match('/(?:^|\s)(\d{2}):(\d{2})(?::\d{2})?$/', $time, $matches) || (int) $matches[1] < 8) return false;
+    }
+    return true;
+}
+
 function destination_fetch($params) {
     $url = 'https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     $curl = curl_init($url);
@@ -98,7 +111,7 @@ function destination_complete($best, $data, $query, $return) {
         foreach ((array) ($data[$group] ?? array()) as $option) {
             if (!is_array($option) || !is_numeric($option['price'] ?? null) || (float) $option['price'] <= 0) continue;
             $legs = $option['flights'] ?? array();
-            if (!is_array($legs) || !$legs) continue;
+            if (!destination_option_matches($legs, $query)) continue;
             $first = reset($legs); $last = end($legs);
             if (($first['departure_airport']['id'] ?? '') !== $query['destination'] || ($last['arrival_airport']['id'] ?? '') !== $query['origin']) continue;
             if (substr((string) ($first['departure_airport']['time'] ?? ''), 0, 10) !== $return) continue;
@@ -109,6 +122,7 @@ function destination_complete($best, $data, $query, $return) {
             $best['checkedAt'] = gmdate('c');
             $best['returnAirline'] = (string) ($first['airline'] ?? '');
             $best['returnStops'] = max(0, count($legs) - 1);
+            $best['returnDepartureTime'] = (string) ($first['departure_airport']['time'] ?? '');
         }
     }
     return ($best['priceStatus'] ?? '') === 'complete' ? $best : null;
@@ -121,7 +135,7 @@ function destination_best($data, $query, $departure, $return) {
         foreach ((array) ($data[$group] ?? array()) as $option) {
             if (!is_array($option) || !isset($option['price']) || !is_numeric($option['price']) || (float) $option['price'] <= 0) continue;
             $flights = $option['flights'] ?? array();
-            if (!is_array($flights) || !$flights) continue;
+            if (!destination_option_matches($flights, $query)) continue;
             $first = reset($flights); $last = end($flights);
             if (!is_array($first) || !is_array($last)) continue;
             $actualOrigin = strtoupper((string) ($first['departure_airport']['id'] ?? ''));
@@ -130,7 +144,7 @@ function destination_best($data, $query, $departure, $return) {
             $price = (float) $option['price'];
             if ($best !== null && $price >= $best['outboundDisplayedPrice']) continue;
             $airlines = array_values(array_unique(array_filter(array_map(function($flight) { return is_array($flight) ? (string) ($flight['airline'] ?? '') : ''; }, $flights))));
-            $best = array('destinationCode' => $query['destination'], 'destinationName' => $query['destination'], 'departureDate' => $departure, 'returnDate' => $return, 'flightPrice' => null, 'outboundDisplayedPrice' => $price, 'currency' => 'EUR', 'airline' => implode(', ', $airlines), 'stops' => max(0, count($flights) - 1), 'flightLink' => $link, '_departureToken' => (string) ($option['departure_token'] ?? ''));
+            $best = array('destinationCode' => $query['destination'], 'destinationName' => $query['destination'], 'departureDate' => $departure, 'returnDate' => $return, 'flightPrice' => null, 'outboundDisplayedPrice' => $price, 'currency' => 'EUR', 'airline' => implode(', ', $airlines), 'stops' => max(0, count($flights) - 1), 'outboundDepartureTime' => (string) ($first['departure_airport']['time'] ?? ''), 'flightLink' => $link, '_departureToken' => (string) ($option['departure_token'] ?? ''));
         }
     }
     return $best;
@@ -167,13 +181,14 @@ $raw = file_get_contents('php://input');
 if ($raw === false || strlen($raw) > 20000) destination_out(400, array('error' => 'Petición no válida.'));
 $body = json_decode($raw, true); $input = $body['query'] ?? null;
 if (!is_array($input)) destination_out(400, array('error' => 'Faltan los datos del seguimiento.'));
-$query = array('origin' => strtoupper(trim((string) ($input['origin'] ?? ''))), 'destination' => strtoupper(trim((string) ($input['destination'] ?? ''))), 'startDate' => (string) ($input['startDate'] ?? ''), 'endDate' => (string) ($input['endDate'] ?? ''), 'minNights' => (int) ($input['minNights'] ?? 7), 'adults' => (int) ($input['adults'] ?? 1), 'children' => (int) ($input['children'] ?? 0), 'infants' => (int) ($input['infants'] ?? 0), 'carryOnBags' => (int) ($input['carryOnBags'] ?? 0), 'checkedBags' => (int) ($input['checkedBags'] ?? 0));
+$query = array('origin' => strtoupper(trim((string) ($input['origin'] ?? ''))), 'destination' => strtoupper(trim((string) ($input['destination'] ?? ''))), 'startDate' => (string) ($input['startDate'] ?? ''), 'endDate' => (string) ($input['endDate'] ?? ''), 'minNights' => (int) ($input['minNights'] ?? 7), 'adults' => (int) ($input['adults'] ?? 1), 'children' => (int) ($input['children'] ?? 0), 'infants' => (int) ($input['infants'] ?? 0), 'carryOnBags' => (int) ($input['carryOnBags'] ?? 0), 'checkedBags' => (int) ($input['checkedBags'] ?? 0), 'stops' => (string) ($input['stops'] ?? 'any'), 'noEarlyDeparture' => !empty($input['noEarlyDeparture']));
 $start = destination_date($query['startDate']); $end = destination_date($query['endDate']); $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
 if (!preg_match('/^[A-Z]{3}$/', $query['origin']) || !preg_match('/^[A-Z]{3}$/', $query['destination']) || $query['origin'] === $query['destination']) destination_out(400, array('error' => 'El origen y el destino deben ser códigos IATA de tres letras y distintos.'));
 if (!$start || !$end || $end < $start || $start < $today || $end > $today->modify('+365 days') || $end->diff($start)->days > 6 || $end->modify('+' . $query['minNights'] . ' days') > $today->modify('+365 days')) destination_out(400, array('error' => 'Elige una ventana de salida de hasta 7 días dentro del próximo año.'));
 if ($query['minNights'] < 1 || $query['minNights'] > 30) destination_out(400, array('error' => 'La estancia debe ser de entre 1 y 30 noches.'));
 if ($query['adults'] < 1 || $query['children'] < 0 || $query['infants'] < 0 || array_sum(array($query['adults'], $query['children'], $query['infants'])) > 9 || $query['infants'] > $query['adults']) destination_out(400, array('error' => 'El número de pasajeros no es válido.'));
 if ($query['carryOnBags'] < 0 || $query['checkedBags'] < 0 || $query['carryOnBags'] + $query['checkedBags'] > array_sum(array($query['adults'], $query['children'], $query['infants']))) destination_out(400, array('error' => 'Las maletas no pueden superar el número de pasajeros.'));
+if (!in_array($query['stops'], array('any', 'nonstop', 'up_to_one'), true)) destination_out(400, array('error' => 'El filtro de escalas no es válido.'));
 $config = hotelio_config(); $apiKey = trim((string) ($config['providers']['serpapi']['api_key'] ?? ''));
 if ($apiKey === '') destination_out(503, array('error' => 'El seguimiento de destinos todavía no está configurado.'));
 $settings = array('per_ip_hourly_limit' => max(1, min(30, (int) ($config['flights']['per_ip_hourly_limit'] ?? 8))), 'monthly_limit' => max(1, min(240, (int) ($config['flights']['monthly_limit'] ?? 120))));
@@ -195,7 +210,8 @@ if ($state['checked'] && !$continue) {
 }
 $pending = array_values(array_filter($dates, function($date) use ($state) { return !array_key_exists($date, $state['checked']); }));
 $failure = null; $performed = 0;
-foreach (array_slice($pending, 0, 2) as $departure) {
+$batchSize = !empty($input['compareDestinations']) ? 1 : 2;
+foreach (array_slice($pending, 0, $batchSize) as $departure) {
     $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings, 2);
     if ($failure !== null) break;
     $return = destination_date($departure)->modify('+' . $query['minNights'] . ' days')->format('Y-m-d');

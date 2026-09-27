@@ -18,6 +18,12 @@ Las credenciales se guardan en `.hotelio-config.php`, fuera de la carpeta públi
 
 La configuración de proveedores está disponible en `/vuelotel/admin/`, protegida con contraseña. La administración de usuarios, búsquedas y alertas se abre desde la cuenta administradora dentro de Rumbiva. La ruta pública y el identificador Android existentes se mantienen para conservar enlaces e instalaciones.
 
+### Evaluación de un proveedor adicional de vuelos
+
+Aviasales Data API (Travelpayouts) podría aportar precios orientativos procedentes de caché y ampliar la exploración de destinos. Su uso real requiere cuenta de afiliado, token privado, revisión de sus condiciones y comprobación de límites vigentes. No equivale a disponibilidad ni precio final en tiempo real. Hay un contrato de configuración servidor en `public/api/bootstrap.php` (`providers.aviasales`: `enabled`, `api_token`, `cache_ttl`), desactivado de forma obligatoria hasta implementar y validar el adaptador. El token nunca se envía en `providers.php`, JavaScript ni APK. La fuente oficial es [Travelpayouts Data API](https://support.travelpayouts.com/hc/en-us/articles/360002322092-Data-API).
+
+Las alertas pueden cambiar frecuencia y fecha de caducidad desde **Cuenta → Alertas**. Al modificar la frecuencia, la siguiente comprobación se programa desde el momento de guardar. Una alerta caducada requiere marcar su reactivación; los envíos siguen dependiendo del cron y el correo configurados en el servidor.
+
 El panel permite cambiar la contraseña introduciendo primero la actual. Si se olvida, envía al correo privado configurado un enlace de un solo uso que caduca en una hora. Hotelio nunca envía ni recupera la contraseña existente.
 
 Para desarrollo local, SerpApi puede activarse mediante la variable de entorno `HOTELIO_SERPAPI_KEY`.

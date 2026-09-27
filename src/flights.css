@@ -103,6 +103,11 @@
 .destination-options{grid-template-columns:repeat(5,minmax(0,1fr)) 1.35fr}
 .destination-deal{min-height:205px}
 .flight-destination-output{margin-top:20px}
+.flight-results-close{min-height:44px;white-space:nowrap}
+.radar-plan label{display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer}
+.radar-plan input[type="radio"]{width:18px;height:18px;flex:none}
+.radar-plan-links button{border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;padding:8px 10px;cursor:pointer}
+@media(max-width:600px){.flight-results-head{flex-wrap:wrap}.flight-results-close{width:100%;margin-top:8px}}
 .flight-explore-grid{grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(130px,.8fr)) auto;align-items:stretch}
 .flight-explore-grid .flight-submit{min-width:180px}
 .flight-explore-output{margin-top:20px}
