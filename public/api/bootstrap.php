@@ -72,7 +72,7 @@ function hotelio_config() {
     $config['providers']['aviasales']['cache_ttl'] = max(3600, min(604800, (int) $config['providers']['aviasales']['cache_ttl']));
     $config['flights']['enabled'] = !empty($config['flights']['enabled']);
     $config['flights']['cache_ttl'] = max(300, min(86400, (int) $config['flights']['cache_ttl']));
-    $config['flights']['monthly_limit'] = max(1, min(240, (int) $config['flights']['monthly_limit']));
+    $config['flights']['monthly_limit'] = max(1, min(120, (int) $config['flights']['monthly_limit']));
     $config['flights']['per_ip_hourly_limit'] = max(1, min(30, (int) $config['flights']['per_ip_hourly_limit']));
     return $config;
 }

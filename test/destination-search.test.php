@@ -29,4 +29,20 @@ $early = array(array('departure_airport' => array('time' => '2026-11-15 06:10'))
 check(destination_option_matches($direct, array('stops' => 'nonstop', 'noEarlyDeparture' => true)), 'A direct flight after 08:00 should match.');
 check(!destination_option_matches($early, array('stops' => 'any', 'noEarlyDeparture' => true)), 'An early departure must be excluded.');
 check(!destination_option_matches(array($direct[0], $direct[0]), array('stops' => 'nonstop')), 'A connection must be excluded by the nonstop filter.');
+
+$today = destination_date('2026-09-27');
+$window = destination_flexible_window('6m', $today);
+check($window[0]->format('Y-m-d') === '2026-09-27' && $window[1]->format('Y-m-d') === '2027-03-26', 'Anytime search covers the next six months.');
+check(destination_flexible_window('2026-11', $today)[2] === 11, 'A concrete month maps to the provider month.');
+check(destination_flexible_window('2027-09', $today) === null, 'Out-of-horizon months must be rejected.');
+$samples = destination_flexible_dates($window[0], $window[1], 7);
+check(count($samples) >= 10 && count($samples) <= 13 && count(array_unique($samples)) === count($samples), 'A bounded sample spans the horizon without claiming exhaustive coverage.');
+check(min($samples) < '2026-11-01' && max($samples) > '2027-02-01', 'Samples must reach both ends of the horizon.');
+check(abs(strtotime($samples[0]) - strtotime($samples[1])) > 20 * 86400, 'The first two dates should be distributed across the period.');
+$explore = destination_explore_params(array_merge($query, array('minNights' => 7, 'stops' => 'nonstop')), 0, 'test-key');
+check($explore['engine'] === 'google_travel_explore' && $explore['arrival_id'] === 'FCO' && $explore['month'] === 0 && $explore['stops'] === 1, 'Discovery must target the selected destination and flexible months.');
+$candidate = array('start_date' => '2026-11-12', 'end_date' => '2026-11-19', 'flights' => array(array('departure_airport' => array('id' => 'MAD'), 'arrival_airport' => array('id' => 'FCO'), 'number_of_stops' => 0)));
+check(destination_explore_candidate($candidate, array_merge($query, array('minNights' => 7, 'stops' => 'nonstop')), $window[0], $window[1]) === '2026-11-12', 'An exact-duration candidate can be verified first.');
+$candidate['end_date'] = '2026-11-20';
+check(destination_explore_candidate($candidate, array_merge($query, array('minNights' => 7, 'stops' => 'nonstop')), $window[0], $window[1]) === null, 'A flexible approximate duration cannot masquerade as seven nights.');
 echo "Destination search contract passed.\n";

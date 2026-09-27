@@ -1,8 +1,8 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.4.0';
-import {mountCombinedSearch} from './combined.js?v=2.4.0';
-import {mountAccount} from './account.js?v=2.4.0';
-import {readRadarShare} from './radar-plans.js?v=2.4.0';
+import {mountFlightSearch} from './flights.js?v=2.5.0';
+import {mountCombinedSearch} from './combined.js?v=2.5.0';
+import {mountAccount} from './account.js?v=2.5.0';
+import {readRadarShare} from './radar-plans.js?v=2.5.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -90,7 +90,7 @@ const openSavedSearch=event=>{
   if(saved.type==='destination'){
     setTravelView('flights');
     const form=document.querySelector('#flightView .flight-destination-form');
-    ['origin','destination','startDate','endDate','minNights','adults','children','infants','carryOnBags','checkedBags','maxBudget','stops'].forEach(name=>setField(form,name,filters[name]));
+    ['origin','destination','flexiblePeriod','minNights','adults','children','infants','carryOnBags','checkedBags','maxBudget','stops'].forEach(name=>setField(form,name,filters[name]));
     if(Array.isArray(filters.destinations)){['destination','destination2','destination3'].forEach((name,index)=>setField(form,name,filters.destinations[index]||''))}
     if(form?.elements?.noEarlyDeparture)form.elements.noEarlyDeparture.checked=filters.noEarlyDeparture===true;
     const plans=Array.isArray(filters.plans)?filters.plans:[],output=document.querySelector('#flightView .flight-destination-output');

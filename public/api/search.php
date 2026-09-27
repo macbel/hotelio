@@ -22,6 +22,27 @@ function respond($status, $body) {
     exit;
 }
 
+function reserve_serpapi_hotel_call($config) {
+    $dir = dirname(hotelio_config_path()) . DIRECTORY_SEPARATOR . '.hotelio-flight-data';
+    if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) respond(503, array('error' => 'No se pudo preparar el control de consultas.'));
+    $handle = fopen($dir . DIRECTORY_SEPARATOR . 'usage.json', 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) respond(503, array('error' => 'No se pudo coordinar el control de consultas.'));
+    $state = json_decode(stream_get_contents($handle) ?: '', true);
+    if (!is_array($state)) $state = array();
+    $month = gmdate('Y-m');
+    if (($state['month'] ?? '') !== $month) { $state['month'] = $month; $state['monthly_calls'] = 0; }
+    $limit = max(1, min(120, (int) ($config['flights']['monthly_limit'] ?? 120)));
+    if ((int) ($state['monthly_calls'] ?? 0) >= $limit) {
+        flock($handle, LOCK_UN); fclose($handle);
+        respond(429, array('error' => 'Se ha alcanzado el límite mensual compartido de consultas de vuelos y hoteles.'));
+    }
+    $state['monthly_calls'] = (int) ($state['monthly_calls'] ?? 0) + 1;
+    rewind($handle); ftruncate($handle, 0);
+    $written = fwrite($handle, json_encode($state, JSON_UNESCAPED_SLASHES)); fflush($handle);
+    flock($handle, LOCK_UN); fclose($handle);
+    if ($written === false) respond(503, array('error' => 'No se pudo actualizar el control de consultas.'));
+}
+
 function get_json($url, $headers = array()) {
     $curl = curl_init($url);
     curl_setopt_array($curl, array(
@@ -213,6 +234,7 @@ try {
         if ($accommodationType !== 'apartment' && isset($boardAmenities[$board])) $params['amenities'] = $boardAmenities[$board];
         $ages = array_map(function($age) { return max(1, (int) $age); }, $query['childrenAges'] ?? array());
         if ($ages) $params['children_ages'] = implode(',', $ages);
+        reserve_serpapi_hotel_call($config);
         $data = get_json('https://serpapi.com/search.json?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986));
         if (!empty($data['error'])) throw new Exception(is_string($data['error']) ? $data['error'] : 'Error de SerpApi');
         $results = array();

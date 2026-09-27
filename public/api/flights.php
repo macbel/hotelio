@@ -64,7 +64,7 @@ function hotelio_flights_settings($config) {
         'storage_path' => $storage,
         'cache_ttl_seconds' => hotelio_flights_integer_setting($settings, 'cache_ttl', 'HOTELIO_FLIGHTS_CACHE_TTL', 3600, 300, 86400),
         'ip_hourly_limit' => hotelio_flights_integer_setting($settings, 'per_ip_hourly_limit', 'HOTELIO_FLIGHTS_IP_HOURLY_LIMIT', 8, 1, 30),
-        'monthly_limit' => hotelio_flights_integer_setting($settings, 'monthly_limit', 'HOTELIO_FLIGHTS_MONTHLY_LIMIT', 120, 1, 10000)
+        'monthly_limit' => hotelio_flights_integer_setting($settings, 'monthly_limit', 'HOTELIO_FLIGHTS_MONTHLY_LIMIT', 120, 1, 120)
     );
 }
 

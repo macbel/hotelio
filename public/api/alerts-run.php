@@ -79,11 +79,18 @@ foreach ($alerts as $alert) {
         if ($alert['type'] === 'flight') {
             $price = vuelotel_lowest(vuelotel_internal_post('flights.php', $query), 'price', true);
         } elseif ($alert['type'] === 'destination') {
+            if (!empty($query['flexible']) && $alertScope === 'plan' && is_array($plan)) {
+                // A selected plan keeps its exact dates, so its hotel and flight remain comparable.
+                $query['flexible'] = false;
+                $query['startDate'] = (string) ($plan['departureDate'] ?? '');
+                $query['endDate'] = $query['startDate'];
+            }
             $destinationResult = vuelotel_internal_post('destination-search.php', $query, true);
             if ($alertScope === 'plan') $price = vuelotel_plan_price($destinationResult, $query, $plan);
             else {
-                if (empty($destinationResult['coverage']['complete'])) throw new Exception('La comparación de fechas sigue incompleta.');
+                if (empty($storedQuery['flexible']) && empty($destinationResult['coverage']['complete'])) throw new Exception('La comparación de fechas sigue incompleta.');
                 $price = vuelotel_lowest($destinationResult, 'flightPrice', true);
+                if (!empty($storedQuery['flexible']) && $price !== null && $alert['last_price'] !== null) $price = min($price, (float) $alert['last_price']);
             }
         } elseif ($alert['type'] === 'hotel') {
             $price = vuelotel_lowest(vuelotel_internal_post('search.php?provider=serpapi', $query), 'totalPrice');

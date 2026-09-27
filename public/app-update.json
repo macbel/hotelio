@@ -1,7 +1,7 @@
 {
-  "versionCode": 12,
-  "versionName": "2.4.0",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.4.0.apk",
-  "sha256": "f51294386b985ae4730ad753c1ce161a2eb4122eec2d7d72236bfa7d1b178b6a",
-  "releaseNotes": "Alertas editables, comparación de hasta tres destinos, filtros de vuelos y resultados que se pueden cerrar."
+  "versionCode": 13,
+  "versionName": "2.5.0",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.5.0.apk",
+  "sha256": "674ea7dbd481b1c881472b222b9bf4102aefa5c90556ed5bff828a92af6408be",
+  "releaseNotes": "Seguimiento flexible por destino durante tres o seis meses, cuenta y alertas corregidas en APK y configuración privada de Aviasales preparada."
 }

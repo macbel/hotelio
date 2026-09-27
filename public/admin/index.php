@@ -162,13 +162,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $storedKey = (string) ($config['providers']['serpapi']['api_key'] ?? '');
         if ($newKey !== '') $storedKey = $newKey;
         if (!empty($_POST['remove_serpapi'])) $storedKey = '';
+        $newAviasalesToken = trim((string) ($_POST['aviasales_token'] ?? ''));
+        $storedAviasalesToken = (string) ($config['providers']['aviasales']['api_token'] ?? '');
+        if ($newAviasalesToken !== '') $storedAviasalesToken = mb_substr($newAviasalesToken, 0, 200);
+        if (!empty($_POST['remove_aviasales'])) $storedAviasalesToken = '';
         $config['admin_email'] = $adminEmail;
         $config['providers']['stay22'] = array('enabled' => !empty($_POST['stay22_enabled']), 'aid' => 'hotelio');
         $config['providers']['serpapi'] = array('enabled' => !empty($_POST['serpapi_enabled']) && $storedKey !== '', 'api_key' => $storedKey);
+        $config['providers']['aviasales'] = array('enabled' => false, 'api_token' => $storedAviasalesToken, 'cache_ttl' => 86400);
         $config['flights'] = array(
             'enabled' => !empty($_POST['flights_enabled']),
             'cache_ttl' => 3600,
-            'monthly_limit' => max(1, min(240, (int) ($_POST['flights_monthly_limit'] ?? 120))),
+            'monthly_limit' => max(1, min(120, (int) ($_POST['flights_monthly_limit'] ?? 120))),
             'per_ip_hourly_limit' => max(1, min(30, (int) ($_POST['flights_hourly_limit'] ?? 8)))
         );
         if (hotelio_write_config($config)) {
@@ -276,9 +281,16 @@ $validResetToken = $hasResetToken && admin_reset_token_is_valid($resetToken, $co
       </section>
       <section class="card">
         <div class="row"><div><strong>Vuelos · Google Flights</strong><p class="muted">Usa la misma clave privada de SerpApi. Caché fija de 1 hora.</p></div><input type="checkbox" name="flights_enabled" value="1" <?= !empty($config['flights']['enabled']) ? 'checked' : '' ?> aria-label="Activar buscador de vuelos"></div>
-        <label class="field">Máximo de búsquedas de vuelos al mes<input type="number" name="flights_monthly_limit" min="1" max="240" value="<?= admin_escape($config['flights']['monthly_limit'] ?? 120) ?>"></label>
+        <label class="field">Máximo de consultas SerpApi al mes<input type="number" name="flights_monthly_limit" min="1" max="120" value="<?= admin_escape($config['flights']['monthly_limit'] ?? 120) ?>"></label>
         <label class="field">Máximo por usuario y hora<input type="number" name="flights_hourly_limit" min="1" max="30" value="<?= admin_escape($config['flights']['per_ip_hourly_limit'] ?? 8) ?>"></label>
         <p class="muted">Las consultas de SerpApi se comparten entre hoteles y vuelos. Rumbiva limita los vuelos a 120 consultas mensuales para reservar margen.</p>
+      </section>
+      <section class="card">
+        <h2>Aviasales Data API · fechas orientativas</h2>
+        <p class="muted"><?= !empty($config['providers']['aviasales']['api_token']) ? 'Token guardado de forma privada en el servidor. Integración de precios pendiente.' : 'Desactivado: todavía no hay token configurado.' ?></p>
+        <p class="muted">Puede servir para proponer fechas y precios orientativos de su caché. No verificará tarifas actuales ni alimentará alertas hasta que cada vuelo se reconfirme con ida y vuelta. Su configuración aquí no activa búsquedas todavía.</p>
+        <label class="field">Token privado de Aviasales (vacío para conservarlo)<input type="password" name="aviasales_token" autocomplete="new-password" maxlength="200" placeholder="Token de Travelpayouts / Aviasales"></label>
+        <?php if (!empty($config['providers']['aviasales']['api_token'])): ?><label class="row muted"><span>Eliminar el token guardado</span><input type="checkbox" name="remove_aviasales" value="1"></label><?php endif; ?>
       </section>
       <div class="actions"><a class="button logout" href="?logout=1">Cerrar sesión</a><button type="submit" name="save_providers" value="1">Guardar proveedores</button></div>
     </form>

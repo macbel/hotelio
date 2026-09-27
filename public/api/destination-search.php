@@ -174,6 +174,73 @@ function destination_payload($query, $state, $dates, $notice, $cached, $retryAft
     return $payload;
 }
 
+function destination_flexible_window($period, $today) {
+    $last = $today->modify('+6 months')->modify('-1 day');
+    if ($period === '3m') return array($today, $today->modify('+3 months')->modify('-1 day'), 0);
+    if ($period === '6m') return array($today, $last, 0);
+    if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $period)) {
+        $start = destination_date($period . '-01');
+        if ($start && $start <= $last && $start->modify('last day of this month') >= $today) {
+            return array($start < $today ? $today : $start, $start->modify('last day of this month') > $last ? $last : $start->modify('last day of this month'), (int) $start->format('n'));
+        }
+    }
+    return null;
+}
+
+function destination_flexible_dates($start, $end, $nights) {
+    $last = $end->modify('-' . $nights . ' days');
+    if ($last < $start) return array();
+    $dates = array();
+    // Two well-separated samples per calendar month; this is sampling, not exhaustive coverage.
+    for ($month = $start->modify('first day of this month'); $month <= $last; $month = $month->modify('first day of next month')) {
+        foreach (array(8, 22) as $day) {
+            $candidate = $month->modify('+' . ($day - 1) . ' days');
+            if ($candidate >= $start && $candidate <= $last) $dates[] = $candidate->format('Y-m-d');
+        }
+    }
+    if (!$dates) $dates[] = $start->format('Y-m-d');
+    $spread = array(); $queue = array(array(0, count($dates) - 1));
+    while ($queue) {
+        list($left, $right) = array_shift($queue);
+        if ($left > $right) continue;
+        $middle = intdiv($left + $right, 2);
+        $spread[] = $dates[$middle];
+        $queue[] = array($left, $middle - 1); $queue[] = array($middle + 1, $right);
+    }
+    return $spread;
+}
+
+function destination_explore_params($query, $month, $apiKey) {
+    $duration = $query['minNights'] <= 4 ? 1 : ($query['minNights'] <= 9 ? 2 : 3);
+    $params = array('engine' => 'google_travel_explore', 'departure_id' => $query['origin'], 'arrival_id' => $query['destination'], 'month' => $month, 'travel_duration' => $duration, 'type' => 1, 'travel_mode' => 1, 'adults' => $query['adults'], 'children' => $query['children'], 'infants_in_seat' => $query['infants'], 'currency' => 'EUR', 'hl' => 'es', 'gl' => 'es', 'api_key' => $apiKey);
+    if ($query['carryOnBags'] > 0) $params['bags'] = $query['carryOnBags'];
+    if ($query['stops'] === 'nonstop') $params['stops'] = 1;
+    if ($query['stops'] === 'up_to_one') $params['stops'] = 2;
+    return $params;
+}
+
+function destination_explore_candidate($data, $query, $start, $end) {
+    $outbound = destination_date($data['start_date'] ?? null);
+    $return = destination_date($data['end_date'] ?? null);
+    if (!$outbound || !$return || $outbound < $start || $return > $end || $outbound->diff($return)->days !== $query['minNights']) return null;
+    foreach ((array) ($data['flights'] ?? array()) as $flight) {
+        if (($flight['departure_airport']['id'] ?? '') !== $query['origin'] || ($flight['arrival_airport']['id'] ?? '') !== $query['destination']) continue;
+        if ($query['stops'] === 'nonstop' && (int) ($flight['number_of_stops'] ?? 99) > 0) continue;
+        if ($query['stops'] === 'up_to_one' && (int) ($flight['number_of_stops'] ?? 99) > 1) continue;
+        return $outbound->format('Y-m-d');
+    }
+    return null;
+}
+
+function destination_flexible_payload($query, $state, $dates, $start, $end, $notice, $cached, $retryAfter = null) {
+    $payload = destination_payload($query, $state, $dates, $notice, $cached, $retryAfter);
+    $payload['coverage']['sampled'] = true;
+    $payload['coverage']['horizonDays'] = $start->diff($end)->days + 1;
+    $payload['coverage']['discovery'] = (string) ($state['discoveryStatus'] ?? 'pending');
+    $payload['coverage']['checkedAt'] = gmdate('c', (int) ($state['updatedAt'] ?? time()));
+    return $payload;
+}
+
 if (defined('DESTINATION_SEARCH_LIBRARY_ONLY')) return;
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') destination_out(405, array('error' => 'Método no permitido.'));
@@ -181,20 +248,81 @@ $raw = file_get_contents('php://input');
 if ($raw === false || strlen($raw) > 20000) destination_out(400, array('error' => 'Petición no válida.'));
 $body = json_decode($raw, true); $input = $body['query'] ?? null;
 if (!is_array($input)) destination_out(400, array('error' => 'Faltan los datos del seguimiento.'));
-$query = array('origin' => strtoupper(trim((string) ($input['origin'] ?? ''))), 'destination' => strtoupper(trim((string) ($input['destination'] ?? ''))), 'startDate' => (string) ($input['startDate'] ?? ''), 'endDate' => (string) ($input['endDate'] ?? ''), 'minNights' => (int) ($input['minNights'] ?? 7), 'adults' => (int) ($input['adults'] ?? 1), 'children' => (int) ($input['children'] ?? 0), 'infants' => (int) ($input['infants'] ?? 0), 'carryOnBags' => (int) ($input['carryOnBags'] ?? 0), 'checkedBags' => (int) ($input['checkedBags'] ?? 0), 'stops' => (string) ($input['stops'] ?? 'any'), 'noEarlyDeparture' => !empty($input['noEarlyDeparture']));
+$query = array('origin' => strtoupper(trim((string) ($input['origin'] ?? ''))), 'destination' => strtoupper(trim((string) ($input['destination'] ?? ''))), 'startDate' => (string) ($input['startDate'] ?? ''), 'endDate' => (string) ($input['endDate'] ?? ''), 'flexible' => !empty($input['flexible']), 'flexiblePeriod' => (string) ($input['flexiblePeriod'] ?? '6m'), 'minNights' => (int) ($input['minNights'] ?? 7), 'adults' => (int) ($input['adults'] ?? 1), 'children' => (int) ($input['children'] ?? 0), 'infants' => (int) ($input['infants'] ?? 0), 'carryOnBags' => (int) ($input['carryOnBags'] ?? 0), 'checkedBags' => (int) ($input['checkedBags'] ?? 0), 'stops' => (string) ($input['stops'] ?? 'any'), 'noEarlyDeparture' => !empty($input['noEarlyDeparture']));
 $start = destination_date($query['startDate']); $end = destination_date($query['endDate']); $today = new DateTimeImmutable('today', new DateTimeZone('UTC'));
 if (!preg_match('/^[A-Z]{3}$/', $query['origin']) || !preg_match('/^[A-Z]{3}$/', $query['destination']) || $query['origin'] === $query['destination']) destination_out(400, array('error' => 'El origen y el destino deben ser códigos IATA de tres letras y distintos.'));
-if (!$start || !$end || $end < $start || $start < $today || $end > $today->modify('+365 days') || $end->diff($start)->days > 6 || $end->modify('+' . $query['minNights'] . ' days') > $today->modify('+365 days')) destination_out(400, array('error' => 'Elige una ventana de salida de hasta 7 días dentro del próximo año.'));
+if (!$query['flexible'] && (!$start || !$end || $end < $start || $start < $today || $end > $today->modify('+365 days') || $end->diff($start)->days > 6 || $end->modify('+' . $query['minNights'] . ' days') > $today->modify('+365 days'))) destination_out(400, array('error' => 'Elige una ventana de salida de hasta 7 días dentro del próximo año.'));
+if ($query['flexible'] && !destination_flexible_window($query['flexiblePeriod'], $today)) destination_out(400, array('error' => 'El periodo flexible debe estar dentro de los próximos seis meses.'));
 if ($query['minNights'] < 1 || $query['minNights'] > 30) destination_out(400, array('error' => 'La estancia debe ser de entre 1 y 30 noches.'));
 if ($query['adults'] < 1 || $query['children'] < 0 || $query['infants'] < 0 || array_sum(array($query['adults'], $query['children'], $query['infants'])) > 9 || $query['infants'] > $query['adults']) destination_out(400, array('error' => 'El número de pasajeros no es válido.'));
 if ($query['carryOnBags'] < 0 || $query['checkedBags'] < 0 || $query['carryOnBags'] + $query['checkedBags'] > array_sum(array($query['adults'], $query['children'], $query['infants']))) destination_out(400, array('error' => 'Las maletas no pueden superar el número de pasajeros.'));
 if (!in_array($query['stops'], array('any', 'nonstop', 'up_to_one'), true)) destination_out(400, array('error' => 'El filtro de escalas no es válido.'));
 $config = hotelio_config(); $apiKey = trim((string) ($config['providers']['serpapi']['api_key'] ?? ''));
 if ($apiKey === '') destination_out(503, array('error' => 'El seguimiento de destinos todavía no está configurado.'));
-$settings = array('per_ip_hourly_limit' => max(1, min(30, (int) ($config['flights']['per_ip_hourly_limit'] ?? 8))), 'monthly_limit' => max(1, min(240, (int) ($config['flights']['monthly_limit'] ?? 120))));
+$settings = array('per_ip_hourly_limit' => max(1, min(30, (int) ($config['flights']['per_ip_hourly_limit'] ?? 8))), 'monthly_limit' => max(1, min(120, (int) ($config['flights']['monthly_limit'] ?? 120))));
 $ttl = max(300, min(86400, (int) ($config['flights']['cache_ttl'] ?? 3600)));
 $storage = dirname(hotelio_config_path()) . DIRECTORY_SEPARATOR . '.hotelio-flight-data' . DIRECTORY_SEPARATOR . 'destinations';
 if (!is_dir($storage) && !mkdir($storage, 0700, true) && !is_dir($storage)) destination_out(503, array('error' => 'No se pudo preparar la caché.'));
+if ($query['flexible']) {
+    list($windowStart, $windowEnd, $month) = destination_flexible_window($query['flexiblePeriod'], $today);
+    $dates = destination_flexible_dates($windowStart, $windowEnd, $query['minNights']);
+    $cache = $storage . DIRECTORY_SEPARATOR . 'flex-v1-' . hash('sha256', json_encode($query, JSON_UNESCAPED_SLASHES)) . '.json';
+    $handle = fopen($cache, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) destination_out(503, array('error' => 'No se pudo coordinar la comparación de fechas.'));
+    $state = json_decode(stream_get_contents($handle) ?: '', true);
+    // Keep the sample cursor for a month so infrequent alerts can progress through
+    // different dates. Every quote carries its own checkedAt and is displayed as a snapshot.
+    if (!is_array($state) || (int) ($state['startedAt'] ?? 0) < time() - 30 * 86400) $state = array('checked' => array(), 'results' => array(), 'startedAt' => time(), 'discoveryStatus' => 'pending');
+    $failure = null; $performed = false;
+    if (($state['discoveryStatus'] ?? 'pending') === 'pending') {
+        $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings, 1);
+        if ($failure === null) {
+            $explore = destination_fetch(destination_explore_params($query, $month, $apiKey));
+            if (isset($explore['error'])) $failure = $explore;
+            else {
+                $candidate = destination_explore_candidate($explore['data'], $query, $windowStart, $windowEnd);
+                $state['discoveryStatus'] = $candidate ? 'candidate' : 'sampled';
+                if ($candidate !== null) array_unshift($dates, $candidate);
+                $performed = true;
+            }
+        }
+    } else {
+        $candidate = $state['candidateDate'] ?? null;
+        if (is_string($candidate) && !in_array($candidate, $dates, true)) array_unshift($dates, $candidate);
+    }
+    if (isset($candidate) && $candidate !== null) $state['candidateDate'] = $candidate;
+    $dates = array_values(array_unique($dates));
+    if (!empty($state['checked']) && empty($body['continue']) && $failure === null) {
+        $payload = destination_flexible_payload($query, $state, $dates, $windowStart, $windowEnd, 'Resultados recientes. Pulsa «Comprobar otra fecha» para ampliar la muestra.', true);
+        flock($handle, LOCK_UN); fclose($handle); destination_out(200, $payload);
+    }
+    // The first search compares two dates spread over the period; continuation adds one.
+    $pending = array_values(array_filter($dates, function($date) use ($state) { return !array_key_exists($date, $state['checked']); }));
+    foreach (array_slice($pending, 0, empty($body['continue']) ? 2 : 1) as $departure) {
+        if ($failure !== null) break;
+        $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings, 2);
+        if ($failure === null) {
+            $return = destination_date($departure)->modify('+' . $query['minNights'] . ' days')->format('Y-m-d');
+            $response = destination_provider($query, $departure, $return, $apiKey);
+            if (isset($response['error'])) $failure = $response;
+            else {
+                $state['checked'][$departure] = time();
+                if ($response['result'] !== null) $state['results'][$departure] = $response['result'];
+                $performed = true;
+            }
+        }
+    }
+    if ($performed) {
+        $state['updatedAt'] = time();
+        rewind($handle); ftruncate($handle, 0);
+        fwrite($handle, json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); fflush($handle);
+    }
+    $notice = $failure ? $failure['error'] : 'Más barato encontrado entre las fechas comprobadas. Se prueban fechas repartidas por el periodo; los demás días pueden ofrecer otro precio.';
+    $payload = destination_flexible_payload($query, $state, $dates, $windowStart, $windowEnd, $notice, !$performed, $failure['retryAfter'] ?? null);
+    flock($handle, LOCK_UN); fclose($handle);
+    if ($failure && empty($state['checked'])) destination_out($failure['status'], array('error' => $failure['error'], 'retryAfter' => $failure['retryAfter'] ?? null, 'coverage' => $payload['coverage']));
+    destination_out(200, $payload);
+}
 $dates = destination_dates($start, $end);
 $cache = $storage . DIRECTORY_SEPARATOR . 'v3-' . hash('sha256', json_encode($query, JSON_UNESCAPED_SLASHES)) . '.json';
 $handle = fopen($cache, 'c+');

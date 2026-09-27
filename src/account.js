@@ -58,7 +58,7 @@ async function showAccount(tab='searches'){
   try{const data=await request('account.php');panel.innerHTML=`<div class="account-panel-head"><div><span class="eyebrow">Espacio personal</span><h2>${esc(session.displayName||session.email)}</h2><p>${esc(session.email)}</p></div><button class="account-close" data-close-panel>×</button></div><div class="account-tabs"><button class="is-active" data-account-tab="searches">Búsquedas</button><button data-account-tab="favorites">Favoritos</button><button data-account-tab="alerts">Alertas</button></div><section data-account-section="searches">${data.searches.length?data.searches.map(x=>itemCard(x,'search')).join(''):'<p class="account-empty">Aún no has guardado búsquedas.</p>'}</section><section data-account-section="favorites" hidden>${data.favorites.length?data.favorites.map(x=>itemCard(x,'favorite')).join(''):'<p class="account-empty">Aún no tienes favoritos.</p>'}</section><section data-account-section="alerts" hidden>${data.alerts.length?data.alerts.map(x=>itemCard(x,'alert')).join(''):'<p class="account-empty">No tienes alertas.</p>'}</section><div class="account-panel-actions"><button class="ghost" data-logout>Cerrar sesión</button></div>`;wirePanel(panel,data,tab)}catch(error){panel.innerHTML=`<p class="flight-error">${esc(error.message)}</p>`}
 }
 
-function wirePanel(panel,data){
+function wirePanel(panel,data,tab='searches'){
   panel.querySelector('[data-close-panel]').onclick=()=>panel.hidden=true;
   const selectTab=selected=>{panel.querySelectorAll('[data-account-tab]').forEach(x=>x.classList.toggle('is-active',x.dataset.accountTab===selected));panel.querySelectorAll('[data-account-section]').forEach(x=>x.hidden=x.dataset.accountSection!==selected)};
   selectTab(tab);
