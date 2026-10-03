@@ -1,5 +1,5 @@
 import {searchPublicProvider} from './providers.js?v=2.0.1';
-import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.5.0';
+import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.5.1';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
 const iso=date=>date.toISOString().slice(0,10);

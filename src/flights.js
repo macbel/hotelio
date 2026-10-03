@@ -537,4 +537,4 @@ export function mountFlightSearch(container,options={}){
 
 export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,searchDestination,showResolvedAirport,validateFlightQuery,validateDestinationQuery};
 import {searchPublicProvider} from './providers.js?v=1.2.2';
-import {rankRadarPlans,radarShareUrl} from './radar-plans.js?v=2.5.0';
+import {rankRadarPlans,radarShareUrl} from './radar-plans.js?v=2.5.1';

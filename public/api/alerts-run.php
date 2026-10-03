@@ -1,14 +1,20 @@
 <?php
 require_once __DIR__ . '/user-bootstrap.php';
 $config = hotelio_config();
+require_once __DIR__ . '/alerts-run-support.php';
 $configuredSecret = trim((string) ($config['alerts']['cron_secret'] ?? ''));
 $environmentSecret = getenv('VUELOTEL_CRON_SECRET');
 $expected = $configuredSecret !== '' ? $configuredSecret : (is_string($environmentSecret) ? trim($environmentSecret) : '');
 $provided = (string) ($_SERVER['HTTP_X_VUELOTEL_CRON'] ?? ($_GET['secret'] ?? ''));
-if ($expected === '' || !hash_equals($expected, $provided)) vuelotel_json(403, array('error' => 'Acceso de cron no autorizado.'));
+if (!vuelotel_alerts_authorized(PHP_SAPI, $expected, $provided)) vuelotel_json(403, array('error' => 'Acceso de cron no autorizado.'));
 if (empty($config['alerts']['enabled'])) vuelotel_json(200, array('processed' => 0, 'message' => 'Alertas pausadas.'));
 
-$db = vuelotel_db(); $now = time();
+$db = vuelotel_db();
+$runnerLock = vuelotel_alerts_lock(vuelotel_data_dir() . DIRECTORY_SEPARATOR . 'alerts-run.lock');
+if ($runnerLock === false) vuelotel_json(503, array('error' => 'No se pudo bloquear el procesador de alertas.'));
+if ($runnerLock === null) vuelotel_json(200, array('processed' => 0, 'message' => 'Otra ejecución de alertas sigue activa.'));
+register_shutdown_function(function () use ($runnerLock) { flock($runnerLock, LOCK_UN); fclose($runnerLock); });
+$now = time();
 $db->prepare("INSERT INTO app_settings(key,value) VALUES ('alerts_last_run_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")->execute(array((string) $now));
 $db->prepare('UPDATE alerts SET active=0,updated_at=? WHERE active=1 AND expires_at<=?')->execute(array($now, $now));
 $limit = max(1, min(5, (int) ($config['alerts']['max_checks_per_run'] ?? 2)));
@@ -17,9 +23,9 @@ $statement->bindValue(1, $now, PDO::PARAM_INT); $statement->bindValue(2, $now, P
 $alerts = $statement->fetchAll(); $processed = 0; $changed = 0; $errors = array();
 
 function vuelotel_internal_post($path, $query, $continue = false) {
-    $scheme = !empty($_SERVER['HTTPS']) ? 'https' : 'http';
+    $scheme = PHP_SAPI === 'cli' || !empty($_SERVER['HTTPS']) ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'] ?? 'www.alufi.es';
-    $base = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'] ?? '/vuelotel/api/alerts-run.php')), '/');
+    $base = PHP_SAPI === 'cli' ? '/vuelotel' : rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'] ?? '/vuelotel/api/alerts-run.php')), '/');
     $url = $scheme . '://' . $host . $base . '/api/' . $path;
     $curl = curl_init($url);
     curl_setopt_array($curl, array(CURLOPT_POST => true, CURLOPT_POSTFIELDS => json_encode(array('query' => $query, 'continue' => $continue)), CURLOPT_HTTPHEADER => array('Content-Type: application/json'), CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 120));

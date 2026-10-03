@@ -1,0 +1,44 @@
+name: Revisar alertas de Rumbiva
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rumbiva-alerts
+  cancel-in-progress: false
+
+jobs:
+  check-alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Ejecutar revisiones pendientes
+        env:
+          ALERTS_CRON_SECRET: ${{ secrets.VUELOTEL_ALERTS_CRON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ALERTS_CRON_SECRET" ]]; then
+            echo '::error::Falta el secreto de repositorio VUELOTEL_ALERTS_CRON.'
+            exit 1
+          fi
+          response="$(mktemp)"
+          trap 'rm -f "$response"' EXIT
+          curl --silent --show-error --fail --connect-timeout 30 --max-time 300 \
+            --header "X-Vuelotel-Cron: $ALERTS_CRON_SECRET" \
+            --output "$response" \
+            'https://www.alufi.es/vuelotel/api/alerts-run.php'
+          if ! jq -e 'type == "object" and (.processed | type == "number") and ((.errors // []) | type == "array")' "$response" >/dev/null; then
+            echo '::error::El procesador devolvió una respuesta inesperada.'
+            exit 1
+          fi
+          jq '{processed, changes: (.changes // 0), errorCount: ((.errors // []) | length)}' "$response"
+          if ! jq -e '((.errors // []) | length) == 0' "$response" >/dev/null; then
+            echo '::error::Una o varias alertas fallaron. Consulta el estado de las alertas en Rumbiva.'
+            exit 1
+          fi

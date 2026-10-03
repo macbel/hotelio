@@ -1,8 +1,8 @@
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.5.0';
-import {mountCombinedSearch} from './combined.js?v=2.5.0';
-import {mountAccount} from './account.js?v=2.5.0';
-import {readRadarShare} from './radar-plans.js?v=2.5.0';
+import {mountFlightSearch} from './flights.js?v=2.5.1';
+import {mountCombinedSearch} from './combined.js?v=2.5.1';
+import {mountAccount} from './account.js?v=2.5.1';
+import {readRadarShare} from './radar-plans.js?v=2.5.1';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
