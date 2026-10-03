@@ -83,6 +83,10 @@ npm.cmd run airports:update
 
 ## Compilar como APK
 
+Desde Rumbiva 2.5.2, al abrir la app se consulta el manifiesto de actualizaciones y una APK nueva se descarga automáticamente mediante DownloadManager. Android muestra su confirmación de instalación después de verificar SHA-256; si falta el permiso para instalar desde Rumbiva, se abre Ajustes una vez y la instalación continúa al volver con el permiso concedido. Una denegación o cancelación no vuelve a abrir pantallas en bucle: se puede reintentar en una apertura nueva. Las descargas en curso continúan en segundo plano y se recuperan al volver a abrir la app sin duplicarlas. Los fallos de descarga o verificación esperan una hora antes de reintentarse.
+
+La versión 2.5.1 y anteriores necesitan completar una vez su actualización mediante el flujo anterior, que pide descargar el APK. La descarga automática estará disponible después de instalar 2.5.2. Para verificar las decisiones de descarga, los retornos de permisos y SHA-256 sin dispositivo, desde la carpeta `android` ejecuta `gradlew.bat :app:testDebugUnitTest`; la integración con DownloadManager y el instalador necesita comprobación en un Android real.
+
 Hotelio incluye un proyecto Android basado en Capacitor 8. Requiere Node.js 22 o posterior, JDK 21 y Android SDK 36.
 
 ```powershell

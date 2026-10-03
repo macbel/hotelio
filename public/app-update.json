@@ -1,7 +1,7 @@
 {
-  "versionCode": 14,
-  "versionName": "2.5.1",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.5.1.apk",
-  "sha256": "7ab12e952ce66fb60d18f84c5e2ba53c90223236e641409b4d5cd574836a6ebd",
-  "releaseNotes": "Alertas en tarjetas adaptadas al móvil, edición sin desbordamientos y revisión automática de alertas con estado de comprobaciones pendientes."
+  "versionCode": 15,
+  "versionName": "2.5.2",
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.5.2.apk",
+  "sha256": "9474803d30d63af37ebab6aa5d2e092a9b0e7846c91e83aa593fcae6fadb5159",
+  "releaseNotes": "Descarga automática de nuevas versiones, recuperación de descargas al abrir la app y confirmación de instalación de Android tras verificar la APK."
 }
