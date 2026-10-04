@@ -1,8 +1,14 @@
 # Migración de `/hotelio` a `/vuelotel`
 
-Si el panel del alojamiento no permite programar tareas, el repositorio incluye `.github/workflows/alerts.yml`: ejecuta el procesador cada hora, en el minuto 17 (UTC), y permite ejecución manual desde Actions. GitHub puede retrasar las ejecuciones programadas; el archivo debe estar en la rama predeterminada y Actions debe estar habilitado.
+Si el panel del alojamiento no permite programar tareas, el repositorio incluye `.github/workflows/alerts.yml`: solicita una ejecución cada hora en el minuto 17 (UTC) y permite ejecución manual desde Actions. La programación de GitHub es de mejor esfuerzo: puede retrasarse u omitirse y no garantiza una ejecución a una hora exacta. El archivo debe estar en la rama predeterminada y Actions debe estar habilitado.
 
 Configura en Settings → Secrets and variables → Actions el secreto de repositorio `VUELOTEL_ALERTS_CRON`, con el mismo valor privado de `alerts.cron_secret` del servidor. El workflow lo envía mediante la cabecera `X-Vuelotel-Cron` al endpoint fijo HTTPS. No lo incluyas en el archivo YAML, en una URL ni en registros. Tras publicar el workflow y configurar el secreto, ejecútalo manualmente y verifica una ejecución correcta en Actions y la última revisión en Administración. Una respuesta HTTP fallida o errores de comprobación hacen fallar la ejecución de Actions; los registros muestran únicamente los recuentos.
+
+`scripts/run-alerts.mjs` usa IPv4 y permite hasta tres intentos si curl falla por DNS, conexión o timeout antes de establecer TCP y sin recibir respuesta HTTP. Espera 5 y 15 segundos entre esos intentos, con 20 segundos para conectar y 300 segundos como máximo por petición. Una vez establecida la conexión no repite automáticamente la llamada, porque el servidor podría estar procesando alertas. Las respuestas HTTP fallidas, un JSON inválido o errores del procesador siguen haciendo fallar Actions. El secreto se entrega a curl por su configuración en stdin, sin incluirlo en argumentos ni en registros; los logs muestran categorías de fallo y recuentos, sin datos de viajes.
+
+Sólo si los tres intentos del runner Ubuntu terminan sin establecer conexión, el workflow usa un runner macOS alternativo. Un error HTTP o del procesador, incluso tras un primer fallo de conexión, impide ese fallback para evitar repetir una petición que pudiera haberse ejecutado. Un verificador final exige éxito real del procesador primario o del alternativo; resultados ausentes, checkout fallido y cancelaciones no se consideran éxito.
+
+En la ejecución manual puedes activar `test_failover` para probar el runner alternativo: el primario registra expresamente el diagnóstico y omite toda conexión; macOS hace la revisión real. La opción está desactivada por defecto y no modifica el horario ni duplica llamadas primarias.
 
 1. Renombra la carpeta pública `hotelio` del servidor a `vuelotel`.
 2. Crea una carpeta nueva y pequeña llamada `hotelio` y copia dentro el archivo `hotelio-redirect/.htaccess`. Esto mantiene funcionando enlaces y APK anteriores mientras se actualizan.

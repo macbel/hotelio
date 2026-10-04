@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
+    inputs:
+      test_failover:
+        description: Comprobar el runner alternativo omitiendo la llamada primaria
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,32 +18,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check-alerts:
+  primary:
     runs-on: ubuntu-latest
     timeout-minutes: 7
+    outputs:
+      result: ${{ steps.alerts.outputs.result }}
     steps:
+      - name: Obtener el procesador de alertas
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Ejecutar revisiones pendientes
+        id: alerts
+        continue-on-error: true
         env:
           ALERTS_CRON_SECRET: ${{ secrets.VUELOTEL_ALERTS_CRON }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "$ALERTS_CRON_SECRET" ]]; then
-            echo '::error::Falta el secreto de repositorio VUELOTEL_ALERTS_CRON.'
-            exit 1
-          fi
-          response="$(mktemp)"
-          trap 'rm -f "$response"' EXIT
-          curl --silent --show-error --fail --connect-timeout 30 --max-time 300 \
-            --header "X-Vuelotel-Cron: $ALERTS_CRON_SECRET" \
-            --output "$response" \
-            'https://www.alufi.es/vuelotel/api/alerts-run.php'
-          if ! jq -e 'type == "object" and (.processed | type == "number") and ((.errors // []) | type == "array")' "$response" >/dev/null; then
-            echo '::error::El procesador devolvió una respuesta inesperada.'
-            exit 1
-          fi
-          jq '{processed, changes: (.changes // 0), errorCount: ((.errors // []) | length)}' "$response"
-          if ! jq -e '((.errors // []) | length) == 0' "$response" >/dev/null; then
-            echo '::error::Una o varias alertas fallaron. Consulta el estado de las alertas en Rumbiva.'
-            exit 1
-          fi
+          DIAGNOSTIC_FAILOVER: ${{ github.event_name == 'workflow_dispatch' && inputs.test_failover }}
+        run: node scripts/run-alerts.mjs
+  fallback:
+    needs: primary
+    if: ${{ !cancelled() && needs.primary.result == 'success' && needs.primary.outputs.result == 'preconnect_failed' }}
+    runs-on: macos-latest
+    timeout-minutes: 7
+    outputs:
+      result: ${{ steps.alerts.outputs.result }}
+    steps:
+      - name: Obtener el procesador de alertas
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Ejecutar revisiones desde el runner alternativo
+        id: alerts
+        env:
+          ALERTS_CRON_SECRET: ${{ secrets.VUELOTEL_ALERTS_CRON }}
+        run: node scripts/run-alerts.mjs
+  verify:
+    needs: [primary, fallback]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Obtener el verificador
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verificar el resultado completo
+        env:
+          PRIMARY_STATUS: ${{ needs.primary.result }}
+          PRIMARY_OUTCOME: ${{ needs.primary.outputs.result }}
+          FALLBACK_STATUS: ${{ needs.fallback.result }}
+          FALLBACK_OUTCOME: ${{ needs.fallback.outputs.result }}
+        run: node scripts/run-alerts.mjs --verify-workflow
