@@ -88,9 +88,23 @@ function vuelotel_schema($db) {
     INSERT OR IGNORE INTO app_settings(key,value) VALUES ('max_alerts_per_user','5');");
     $alertColumns = $db->query('PRAGMA table_info(alerts)')->fetchAll();
     $existingColumns = array_column($alertColumns, 'name');
-    foreach (array('last_status' => 'TEXT', 'last_error' => 'TEXT', 'last_notified_at' => 'INTEGER') as $column => $type) {
+    foreach (array('last_status' => 'TEXT', 'last_error' => 'TEXT', 'last_notified_at' => 'INTEGER', 'condition_mode' => 'TEXT',
+        'target_price' => 'REAL', 'min_drop_percent' => 'REAL', 'notify_cooldown_hours' => 'INTEGER NOT NULL DEFAULT 0',
+        'notify_reference_price' => 'REAL', 'notify_pending' => 'INTEGER NOT NULL DEFAULT 0', 'pending_reference_price' => 'REAL', 'pending_notification_id' => 'INTEGER') as $column => $type) {
         if (!in_array($column, $existingColumns, true)) $db->exec('ALTER TABLE alerts ADD COLUMN ' . $column . ' ' . $type);
     }
+    $db->exec("CREATE TABLE IF NOT EXISTS alert_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, alert_id INTEGER NOT NULL, checked_at INTEGER NOT NULL,
+        price REAL, previous_price REAL, reference_price REAL, currency TEXT NOT NULL, direction TEXT NOT NULL,
+        status TEXT NOT NULL, mail_status TEXT NOT NULL DEFAULT 'not_attempted', error TEXT, notified INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE);
+        CREATE INDEX IF NOT EXISTS alert_checks_alert_id ON alert_checks(alert_id,id);
+        CREATE TABLE IF NOT EXISTS alert_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, alert_id INTEGER NOT NULL, label TEXT NOT NULL,
+        old_price REAL, price REAL NOT NULL, currency TEXT NOT NULL, direction TEXT NOT NULL, created_at INTEGER NOT NULL,
+        mail_status TEXT NOT NULL, read_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(alert_id) REFERENCES alerts(id) ON DELETE CASCADE);
+        CREATE INDEX IF NOT EXISTS alert_notifications_user_id ON alert_notifications(user_id,id);");
 }
 
 function vuelotel_seed_admin($db) {

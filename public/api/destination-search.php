@@ -168,8 +168,25 @@ function destination_dates($start, $end) {
 function destination_payload($query, $state, $dates, $notice, $cached, $retryAfter = null) {
     $results = array_values(array_filter((array) ($state['results'] ?? array()), 'is_array'));
     usort($results, function($a, $b) { return ($a['flightPrice'] <=> $b['flightPrice']) ?: strcmp($a['departureDate'], $b['departureDate']); });
-    $checked = count((array) ($state['checked'] ?? array())); $total = count($dates);
-    $payload = array('results' => array_slice($results, 0, 20), 'query' => $query, 'coverage' => array('checked' => $checked, 'total' => $total, 'remaining' => max(0, $total - $checked), 'complete' => $checked === $total), 'cached' => $cached, 'notice' => $notice);
+    $dateCoverage = array(); $checked = 0; $total = count($dates);
+    $orderedDates = $dates; sort($orderedDates);
+    foreach ($orderedDates as $departure) {
+        $stamp = $state['checked'][$departure] ?? null;
+        $wasChecked = is_numeric($stamp) && (int) $stamp > 0;
+        $result = $state['results'][$departure] ?? null;
+        $price = is_array($result) && ($result['priceStatus'] ?? '') === 'complete' && is_numeric($result['flightPrice'] ?? null)
+            && is_finite((float) $result['flightPrice']) && (float) $result['flightPrice'] > 0 ? (float) $result['flightPrice'] : null;
+        $failure = $state['errors'][$departure] ?? null;
+        $returnDate = isset($query['minNights']) ? destination_date($departure)->modify('+' . (int) $query['minNights'] . ' days')->format('Y-m-d') : ($result['returnDate'] ?? null);
+        if ($wasChecked) $checked++;
+        $dateCoverage[] = array('departureDate' => $departure, 'returnDate' => $returnDate,
+            'status' => $wasChecked ? ($price !== null ? 'priced' : 'no_price') : (is_array($failure) ? 'error' : 'pending'),
+            'checked' => $wasChecked, 'checkedAt' => $wasChecked ? gmdate('c', (int) $stamp) : (is_array($failure) ? gmdate('c', (int) $failure['checkedAt']) : null),
+            'hasComparablePrice' => $wasChecked && $price !== null, 'flightPrice' => $wasChecked ? $price : null);
+    }
+    $payload = array('results' => array_slice($results, 0, 20), 'query' => $query, 'coverage' => array('checked' => $checked, 'total' => $total,
+        'remaining' => max(0, $total - $checked), 'complete' => $checked === $total, 'dates' => $dateCoverage,
+        'rangeStart' => $query['startDate'] ?? ($orderedDates[0] ?? null), 'rangeEnd' => $query['endDate'] ?? ($orderedDates ? end($orderedDates) : null)), 'cached' => $cached, 'notice' => $notice);
     if ($retryAfter !== null) $payload['retryAfter'] = $retryAfter;
     return $payload;
 }
@@ -237,7 +254,9 @@ function destination_flexible_payload($query, $state, $dates, $start, $end, $not
     $payload['coverage']['sampled'] = true;
     $payload['coverage']['horizonDays'] = $start->diff($end)->days + 1;
     $payload['coverage']['discovery'] = (string) ($state['discoveryStatus'] ?? 'pending');
-    $payload['coverage']['checkedAt'] = gmdate('c', (int) ($state['updatedAt'] ?? time()));
+    $payload['coverage']['rangeStart'] = $start->format('Y-m-d');
+    $payload['coverage']['rangeEnd'] = $end->format('Y-m-d');
+    $payload['coverage']['checkedAt'] = !empty($state['updatedAt']) ? gmdate('c', (int) $state['updatedAt']) : null;
     return $payload;
 }
 
@@ -304,9 +323,14 @@ if ($query['flexible']) {
         if ($failure === null) {
             $return = destination_date($departure)->modify('+' . $query['minNights'] . ' days')->format('Y-m-d');
             $response = destination_provider($query, $departure, $return, $apiKey);
-            if (isset($response['error'])) $failure = $response;
+            if (isset($response['error'])) {
+                $failure = $response;
+                $state['errors'][$departure] = array('checkedAt' => time());
+                $performed = true;
+            }
             else {
                 $state['checked'][$departure] = time();
+                unset($state['errors'][$departure]);
                 if ($response['result'] !== null) $state['results'][$departure] = $response['result'];
                 $performed = true;
             }
@@ -337,19 +361,20 @@ if ($state['checked'] && !$continue) {
     flock($handle, LOCK_UN); fclose($handle); destination_out(200, $payload);
 }
 $pending = array_values(array_filter($dates, function($date) use ($state) { return !array_key_exists($date, $state['checked']); }));
-$failure = null; $performed = 0;
+$failure = null; $performed = 0; $errorsChanged = false;
 $batchSize = !empty($input['compareDestinations']) ? 1 : 2;
 foreach (array_slice($pending, 0, $batchSize) as $departure) {
     $failure = destination_reserve(dirname($storage) . DIRECTORY_SEPARATOR . 'usage.json', $settings, 2);
     if ($failure !== null) break;
     $return = destination_date($departure)->modify('+' . $query['minNights'] . ' days')->format('Y-m-d');
     $response = destination_provider($query, $departure, $return, $apiKey);
-    if (isset($response['error'])) { $failure = $response; break; }
+    if (isset($response['error'])) { $failure = $response; $state['errors'][$departure] = array('checkedAt' => time()); $errorsChanged = true; break; }
     $state['checked'][$departure] = time(); $performed++;
+    unset($state['errors'][$departure]);
     if ($response['result'] !== null) $state['results'][$departure] = $response['result'];
 }
 if (count($state['checked']) === count($dates)) $state['completedAt'] = time();
-if ($performed) {
+if ($performed || $errorsChanged) {
     rewind($handle); ftruncate($handle, 0);
     fwrite($handle, json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); fflush($handle);
 }

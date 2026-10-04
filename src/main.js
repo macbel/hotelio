@@ -1,8 +1,9 @@
+import {renderPriceBreakdown} from './travel-insights.js?v=2.6.0';
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.5.1';
-import {mountCombinedSearch} from './combined.js?v=2.5.1';
-import {mountAccount} from './account.js?v=2.5.1';
-import {readRadarShare} from './radar-plans.js?v=2.5.1';
+import {mountFlightSearch} from './flights.js?v=2.6.0';
+import {mountCombinedSearch} from './combined.js?v=2.6.0';
+import {mountAccount} from './account.js?v=2.6.0';
+import {readRadarShare} from './radar-plans.js?v=2.6.0';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -238,7 +239,7 @@ function renderResults(query) {
   const stay22Notice=results.some(result=>String(result.provider).startsWith('Stay22'))?`<p class="provider-notice"><strong>Stay22:</strong> ${query.children?'ha transmitido el número de niños, pero no sus edades. Confírmalas al abrir la oferta. ':''}Sus resultados se consultan en tiempo real y no se guardan automáticamente.</p>`:'';
   const providerNotices=notices.length?`<p class="provider-notice">${notices.map(esc).join(' · ')}</p>`:'';
   const connected=results.length ? `<div class="results-head"><div><h2>${results.length} alojamientos encontrados</h2><p>Ordenados por precio total · ${query.nights} noches</p></div></div>${providerNotices}${stay22Notice}<div class="result-list">${results.map((r,i)=>`
-    <article class="result" style="animation-delay:${i*45}ms"><div class="result-img">${['⌂','◇','◒','△'][i%4]}${r.image?`<img src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`:''}</div><div><div class="result-title"><h3>${esc(r.name)}</h3><button class="save-hotel ${r.persistable===false?'is-restricted':findSavedHotel(r,query)?'is-saved':''}" type="button" ${r.persistable===false?'disabled title="Stay22 solo permite consultar los resultados en tiempo real"':`data-save-result="${i}"`} aria-label="${r.persistable===false?'Resultado de consulta no guardable':`Guardar ${esc(r.name)}`}">${r.persistable===false?'Solo consulta':findSavedHotel(r,query)?'♥ Guardado':'♡ Guardar'}</button></div><div class="meta">★ ${esc(r.rating || '—')} · ${esc(r.location || query.destination)} · ${esc(r.provider)} ${r.filterStatus?`<span class="filter-badge ${esc(r.filterStatus)}">${esc(filterStatusLabels[r.filterStatus]||'Confirmar en la web')}</span>`:''}</div><div class="chips">${(r.features||[]).slice(0,3).map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div></div><div class="price"><strong>${money(r.totalPrice,r.currency)}</strong><small>${money(r.nightlyPrice,r.currency)} / noche</small><a href="${esc(r.url || '#')}" target="_blank" rel="noopener">Ver oferta →</a></div></article>`).join('')}</div>`
+    <article class="result" style="animation-delay:${i*45}ms"><div class="result-img">${['⌂','◇','◒','△'][i%4]}${r.image?`<img src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy" referrerpolicy="no-referrer">`:''}</div><div><div class="result-title"><h3>${esc(r.name)}</h3><button class="save-hotel ${r.persistable===false?'is-restricted':findSavedHotel(r,query)?'is-saved':''}" type="button" ${r.persistable===false?'disabled title="Stay22 solo permite consultar los resultados en tiempo real"':`data-save-result="${i}"`} aria-label="${r.persistable===false?'Resultado de consulta no guardable':`Guardar ${esc(r.name)}`}">${r.persistable===false?'Solo consulta':findSavedHotel(r,query)?'♥ Guardado':'♡ Guardar'}</button></div><div class="meta">★ ${esc(r.rating || '—')} · ${esc(r.location || query.destination)} · ${esc(r.provider)} ${r.filterStatus?`<span class="filter-badge ${esc(r.filterStatus)}">${esc(filterStatusLabels[r.filterStatus]||'Confirmar en la web')}</span>`:''}</div><div class="chips">${(r.features||[]).slice(0,3).map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div></div><div class="price"><strong>${money(r.totalPrice,r.currency)}</strong><small>${money(r.nightlyPrice,r.currency)} / noche</small>${renderPriceBreakdown({total:r.totalPrice,currency:r.currency,query,hotelPrice:r.totalPrice})}<a href="${esc(r.url || '#')}" target="_blank" rel="noopener">Ver oferta →</a></div></article>`).join('')}</div>`
     : ((errors.length||notices.length) ? `<div class="provider-errors">${esc([...notices,...errors].join(' · '))}</div>` : '');
   root.innerHTML=renderDirectSearches(query)+connected;
   root.querySelectorAll('.result').forEach((card,index)=>{const hotel=results[index];if(!hotel)return;const message=`Rumbiva · ${hotel.name}\n${query.destination} · ${query.checkIn} → ${query.checkOut}\n${money(hotel.totalPrice,hotel.currency)} total\n${hotel.url||location.href}`;card.querySelector('.price')?.insertAdjacentHTML('beforeend',`<a class="share-whatsapp" href="${esc(whatsappUrl(message))}" target="_blank" rel="noopener noreferrer">Compartir por WhatsApp</a>`)});
@@ -364,4 +365,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=19'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=20'));

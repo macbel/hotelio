@@ -11,3 +11,11 @@
 .alert-edit-form input,.alert-edit-form select{min-height:44px;min-width:0;max-width:100%;width:100%;box-sizing:border-box}
 .alert-edit-form input[type=checkbox]{width:auto}
 .alert-edit-message{color:#a33;overflow-wrap:anywhere}
+.alert-edit-form label[hidden],.search-actions label[hidden],.alert-history[hidden]{display:none}
+.alert-history{margin-top:12px;min-width:0}
+.alert-history-list{list-style:none;padding:0;display:grid;gap:8px}
+.alert-history-list li{display:grid;gap:4px;border-left:3px solid var(--line);padding:8px 10px;background:#f7faf8;border-radius:0 10px 10px 0;overflow-wrap:anywhere;font-size:13px}
+.alert-history-list time{color:var(--muted);font-size:12px}
+.search-actions label{min-width:0}.search-actions select{max-width:100%}
+.native-alert-settings{border:1px solid var(--line);border-radius:14px;padding:13px;background:white;margin:12px 0}.native-alert-settings p{font-size:13px;line-height:1.5}.native-alert-settings button{min-height:44px}
+@media(min-width:761px){.search-actions{flex-wrap:wrap}.search-actions>span{flex-basis:100%}}

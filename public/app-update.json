@@ -1,7 +1,7 @@
 {
-  "versionCode": 15,
-  "versionName": "2.5.2",
-  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.5.2.apk",
-  "sha256": "9474803d30d63af37ebab6aa5d2e092a9b0e7846c91e83aa593fcae6fadb5159",
-  "releaseNotes": "Descarga automática de nuevas versiones, recuperación de descargas al abrir la app y confirmación de instalación de Android tras verificar la APK."
+  "apkUrl": "https://www.alufi.es/vuelotel/downloads/rumbiva-2.6.0.apk",
+  "releaseNotes": "Historial y condiciones de alertas, desglose por grupo y persona, calendario de fechas comprobadas, comparador de viajes y avisos Android voluntarios.",
+  "versionName": "2.6.0",
+  "sha256": "21e51e6a0e070f0bff60e6f702a705754233f30994b91ea19395fe7c2196b1bb",
+  "versionCode": 16
 }

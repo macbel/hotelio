@@ -22,7 +22,24 @@ check(destination_best($response, $query, '2026-11-15', '2026-11-22')['flightLin
 $dates = destination_dates(destination_date('2026-11-15'), destination_date('2026-11-18'));
 check(count($dates) === 4 && count(array_unique($dates)) === 4, 'Every departure date must be visited exactly once.');
 $payload = destination_payload($query, array('checked' => array($dates[0] => 1, $dates[1] => 1), 'results' => array($dates[0] => $best)), $dates, 'Partial', false);
-check($payload['coverage'] === array('checked' => 2, 'total' => 4, 'remaining' => 2, 'complete' => false), 'Partial coverage must be explicit.');
+check($payload['coverage']['checked'] === 2 && $payload['coverage']['total'] === 4 && $payload['coverage']['remaining'] === 2 && $payload['coverage']['complete'] === false, 'Partial coverage must be explicit.');
+check(count($payload['coverage']['dates']) === 4, 'Coverage includes every departure, even outside returned results.');
+$coverageByDate = array_column($payload['coverage']['dates'], null, 'departureDate');
+check($coverageByDate[$dates[0]]['status'] === 'no_price' && $coverageByDate[$dates[0]]['hasComparablePrice'] === false, 'Checked outbound-only result cannot become a comparable round-trip quote.');
+check($coverageByDate[$dates[1]]['status'] === 'no_price' && $coverageByDate[$dates[1]]['checkedAt'] !== null, 'Checked dates with no comparable result retain real check evidence.');
+check($coverageByDate[$dates[2]]['status'] === 'pending' && $coverageByDate[$dates[2]]['checkedAt'] === null, 'Unqueried sample remains pending without invented timestamp.');
+$priced = $best; $priced['priceStatus'] = 'complete'; $priced['flightPrice'] = 150;
+$mixed = destination_payload(array_merge($query, array('minNights' => 7, 'startDate' => min($dates), 'endDate' => max($dates))),
+    array('checked' => array($dates[0] => 100), 'results' => array($dates[0] => $priced), 'errors' => array($dates[1] => array('checkedAt' => 200))), $dates, 'Mixed', false);
+$mixedDates = array_column($mixed['coverage']['dates'], null, 'departureDate');
+check($mixedDates[$dates[0]]['status'] === 'priced' && $mixedDates[$dates[0]]['flightPrice'] === 150.0, 'Comparable flight uses its evidence and actual price.');
+check($mixedDates[$dates[1]]['status'] === 'error' && $mixedDates[$dates[1]]['checked'] === false && $mixedDates[$dates[1]]['flightPrice'] === null, 'Provider error is separate from checked without offers.');
+check($mixed['coverage']['rangeStart'] === min($dates) && $mixed['coverage']['rangeEnd'] === max($dates), 'Coverage supplies its exact date range.');
+$manyDates = destination_dates(destination_date('2026-11-01'), destination_date('2026-11-25'));
+$manyState = array('checked' => array(), 'results' => array());
+foreach ($manyDates as $date) { $entry = $priced; $entry['departureDate'] = $date; $manyState['checked'][$date] = 100; $manyState['results'][$date] = $entry; }
+$many = destination_payload(array_merge($query, array('minNights' => 7)), $manyState, $manyDates, 'Many', true);
+check(count($many['results']) === 20 && count($many['coverage']['dates']) === 25 && $many['coverage']['checked'] === 25, 'Calendar coverage does not infer dates from top twenty displayed results.');
 
 $direct = array(array('departure_airport' => array('time' => '2026-11-15 09:10')));
 $early = array(array('departure_airport' => array('time' => '2026-11-15 06:10')));

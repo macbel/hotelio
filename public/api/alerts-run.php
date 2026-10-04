@@ -2,6 +2,7 @@
 require_once __DIR__ . '/user-bootstrap.php';
 $config = hotelio_config();
 require_once __DIR__ . '/alerts-run-support.php';
+require_once __DIR__ . '/alert-policy.php';
 $configuredSecret = trim((string) ($config['alerts']['cron_secret'] ?? ''));
 $environmentSecret = getenv('VUELOTEL_CRON_SECRET');
 $expected = $configuredSecret !== '' ? $configuredSecret : (is_string($environmentSecret) ? trim($environmentSecret) : '');
@@ -70,7 +71,7 @@ foreach ($alerts as $alert) {
         $storedQuery = json_decode($alert['query_json'], true);
         if (!is_array($storedQuery)) throw new Exception('La configuración de la alerta no es válida.');
         if ($alert['type'] === 'destination' && isset($storedQuery['startDate'], $storedQuery['endDate']) && (strtotime($storedQuery['endDate']) - strtotime($storedQuery['startDate'])) > 6 * 86400) {
-            $db->prepare('UPDATE alerts SET last_checked_at=?,next_check_at=?,last_status=?,last_error=?,updated_at=? WHERE id=?')->execute(array($now, $alert['expires_at'], 'needs_reconfiguration', 'La ventana anterior supera 7 días. Abre la búsqueda y crea una nueva alerta con una ventana válida.', $now, $alert['id']));
+            vuelotel_alert_failure($db, $alert, $now, 'needs_reconfiguration', 'La ventana anterior supera 7 días. Abre la búsqueda y crea una nueva alerta con una ventana válida.', (int) $alert['expires_at']);
             $errors[] = array('id' => (int) $alert['id'], 'error' => 'La ventana antigua necesita una configuración nueva.');
             continue;
         }
@@ -106,31 +107,21 @@ foreach ($alerts as $alert) {
             if ($flightPrice !== null && $hotelPrice !== null) $price = $flightPrice + $hotelPrice;
         }
         if ($price === null) throw new Exception('No se encontró un precio comparable.');
-        // Earlier flight baselines used unselected outbound results. Start a new
-        // comparable baseline after confirming a return leg.
-        $old = $legacyFlightPrice || $alert['last_price'] === null ? null : (float) $alert['last_price'];
-        $direction = $old === null ? 'initial' : ($price > $old ? 'up' : ($price < $old ? 'down' : 'same'));
-        $notify = $old !== null && ($alert['type'] !== 'destination' ? $price !== $old : ($alertMode === 'threshold' ? $price <= $threshold && $old > $threshold : $price < $old));
-        if ($notify) {
-            $verb = $direction === 'up' ? 'ha subido' : 'ha bajado';
-            $sent = vuelotel_send_mail($alert['email'], 'El precio ' . $verb . ' · ' . $alert['label'], '<h2>' . htmlspecialchars($alert['label'], ENT_QUOTES, 'UTF-8') . '</h2><p>El precio ' . $verb . ' de <strong>' . number_format($old, 0, ',', '.') . ' €</strong> a <strong>' . number_format($price, 0, ',', '.') . ' €</strong>.</p><p>Tu alerta seguirá activa hasta ' . date('d/m/Y', $alert['expires_at']) . '.</p>');
-            if (!$sent) {
-                $db->prepare('UPDATE alerts SET last_checked_at=?,next_check_at=?,last_status=?,last_error=?,updated_at=? WHERE id=?')->execute(array($now, $now + 3600, 'mail_failed', 'El servidor no pudo enviar el correo. Se reintentará en una hora.', $now, $alert['id']));
-                $errors[] = array('id' => (int) $alert['id'], 'error' => 'El servidor no pudo enviar el correo.');
-                continue;
-            }
-            $db->prepare('INSERT INTO price_history(alert_id,price,currency,direction,checked_at) VALUES(?,?,?,?,?)')->execute(array($alert['id'], $price, $alert['currency'], $direction, $now));
-            $changed++;
-        }
+        $outcome = vuelotel_apply_alert_price($db, $alert, $price, $now, function($decision) use ($alert) {
+            $reference = $decision['notificationReference'];
+            $verb = $decision['price'] > $reference ? 'ha subido' : 'ha bajado';
+            return vuelotel_send_mail($alert['email'], 'El precio ' . $verb . ' · ' . $alert['label'], '<h2>' . htmlspecialchars($alert['label'], ENT_QUOTES, 'UTF-8') . '</h2><p>El precio ' . $verb . ' de <strong>' . number_format($reference, 0, ',', '.') . ' €</strong> a <strong>' . number_format($decision['price'], 0, ',', '.') . ' €</strong>.</p><p>Tu alerta seguirá activa hasta ' . date('d/m/Y', $alert['expires_at']) . '.</p>');
+        }, $legacyFlightPrice);
+        if ($outcome['sent']) $changed++;
+        if ($outcome['error'] !== null) $errors[] = array('id' => (int) $alert['id'], 'error' => $outcome['error']);
         if ($legacyFlightPrice) {
             $storedQuery['_coverageVersion'] = 3;
             $db->prepare('UPDATE alerts SET query_json=? WHERE id=?')->execute(array(json_encode($storedQuery, JSON_UNESCAPED_UNICODE), $alert['id']));
         }
-        $db->prepare('UPDATE alerts SET last_price=?,last_checked_at=?,next_check_at=?,last_status=?,last_error=NULL,last_notified_at=?,updated_at=? WHERE id=?')->execute(array($price, $now, $now + (int) $alert['frequency_hours'] * 3600, $notify ? 'sent' : 'checked', $notify ? $now : $alert['last_notified_at'], $now, $alert['id']));
         $processed++;
-    } catch (Exception $error) {
-        $db->prepare('UPDATE alerts SET last_checked_at=?,next_check_at=?,last_status=?,last_error=?,updated_at=? WHERE id=?')->execute(array($now, $now + 21600, 'error', mb_substr($error->getMessage(), 0, 240), $now, $alert['id']));
-        $errors[] = array('id' => (int) $alert['id'], 'error' => $error->getMessage());
+    } catch (Throwable $error) {
+        vuelotel_alert_failure($db, $alert, $now, 'error', $error->getMessage(), $now + 21600);
+        $errors[] = array('id' => (int) $alert['id'], 'error' => vuelotel_alert_error($error->getMessage()));
     }
 }
 vuelotel_json(200, array('processed' => $processed, 'changes' => $changed, 'errors' => $errors));

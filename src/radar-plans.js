@@ -6,8 +6,9 @@ export function rankRadarPlans(plans){
   const prices=valid.map(plan=>Number(plan.total)),min=Math.min(...prices),max=Math.max(...prices);
   const scored=valid.map(plan=>{
     const price=max===min?1:1-(Number(plan.total)-min)/(max-min);
-    const stops=Math.max(Number(plan.stops)||0,Number(plan.returnStops)||0);
-    const route=stops===0?1:stops===1?.65:0;
+    const knownStops=[plan.stops,plan.returnStops].every(value=>value!==null&&value!==undefined&&Number.isInteger(Number(value))&&Number(value)>=0);
+    const stops=knownStops?Math.max(Number(plan.stops),Number(plan.returnStops)):null;
+    const route=stops===null?.5:stops===0?1:stops===1?.65:0;
     const rating=Number(plan.hotel?.rating);
     const hotel=rating>0?Math.min(rating/5,1):.5;
     const departureTimes=[plan.outboundDepartureTime,plan.returnDepartureTime];
