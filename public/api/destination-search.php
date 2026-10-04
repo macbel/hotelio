@@ -177,11 +177,12 @@ function destination_payload($query, $state, $dates, $notice, $cached, $retryAft
         $price = is_array($result) && ($result['priceStatus'] ?? '') === 'complete' && is_numeric($result['flightPrice'] ?? null)
             && is_finite((float) $result['flightPrice']) && (float) $result['flightPrice'] > 0 ? (float) $result['flightPrice'] : null;
         $failure = $state['errors'][$departure] ?? null;
+        $errorStamp = is_array($failure) && is_numeric($failure['checkedAt'] ?? null) && (int) $failure['checkedAt'] > 0 ? (int) $failure['checkedAt'] : null;
         $returnDate = isset($query['minNights']) ? destination_date($departure)->modify('+' . (int) $query['minNights'] . ' days')->format('Y-m-d') : ($result['returnDate'] ?? null);
         if ($wasChecked) $checked++;
         $dateCoverage[] = array('departureDate' => $departure, 'returnDate' => $returnDate,
             'status' => $wasChecked ? ($price !== null ? 'priced' : 'no_price') : (is_array($failure) ? 'error' : 'pending'),
-            'checked' => $wasChecked, 'checkedAt' => $wasChecked ? gmdate('c', (int) $stamp) : (is_array($failure) ? gmdate('c', (int) $failure['checkedAt']) : null),
+            'checked' => $wasChecked, 'checkedAt' => $wasChecked ? gmdate('c', (int) $stamp) : ($errorStamp !== null ? gmdate('c', $errorStamp) : null),
             'hasComparablePrice' => $wasChecked && $price !== null, 'flightPrice' => $wasChecked ? $price : null);
     }
     $payload = array('results' => array_slice($results, 0, 20), 'query' => $query, 'coverage' => array('checked' => $checked, 'total' => $total,

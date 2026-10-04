@@ -114,6 +114,23 @@ try {
     $beforeCalls = $calls;
     expect(priceCheck($db, $unknown, 90, 1603600, $accepted)['status'] === 'mail_unknown' && $calls === $beforeCalls, 'Unconfirmed mail is never blindly resent');
     expect((int) $db->query('SELECT COUNT(*) FROM alert_notifications WHERE alert_id=' . $unknown)->fetchColumn() === 1, 'Interrupted mail does not duplicate native events');
+    $durable = createAlert($db);
+    priceCheck($db, $durable, 90, 1604000, function() use ($db, $databasePath, $durable) {
+        expect(!$db->inTransaction(), 'External mail is not sent while holding an open database transaction');
+        $observer = new PDO('sqlite:' . $databasePath);
+        expect($observer->query('SELECT mail_status FROM alert_notifications WHERE alert_id=' . $durable)->fetchColumn() === 'sending', 'Independent connection sees durable mail intent before the external side effect');
+        expect($observer->query('SELECT status FROM alert_checks WHERE alert_id=' . $durable)->fetchColumn() === 'mail_pending', 'Interrupted attempt already has a durable history row');
+        $observer = null;
+        return true;
+    });
+    $crashed = createAlert($db);
+    $db->prepare('INSERT INTO alert_notifications(user_id,alert_id,label,old_price,price,currency,direction,created_at,mail_status) VALUES(?,?,?,?,?,?,?,?,?)')
+        ->execute(array(1, $crashed, 'Interrupted intent', 100, 90, 'EUR', 'down', 1605000, 'sending'));
+    $crashEventId = (int) $db->lastInsertId();
+    $db->prepare('UPDATE alerts SET notify_pending=1,pending_reference_price=100,pending_notification_id=?,last_status=? WHERE id=?')->execute(array($crashEventId, 'mail_pending', $crashed));
+    vuelotel_alert_check($db, fresh($db, $crashed), 1605000, 'mail_pending', 90, 100, 100, 'down', 'pending');
+    $beforeCalls = $calls;
+    expect(priceCheck($db, $crashed, 90, 1608600, $accepted)['status'] === 'mail_unknown' && $calls === $beforeCalls, 'Recovered sending intent after process crash never resends blindly');
     $historyBefore = (int) $db->query('SELECT COUNT(*) FROM alert_checks WHERE alert_id=' . $unknown)->fetchColumn();
     conditions($db, $unknown, 'percent', null, 10);
     expect((int) fresh($db, $unknown)['notify_pending'] === 0 && fresh($db, $unknown)['pending_notification_id'] === null, 'Changing conditions clears pending outbox');
