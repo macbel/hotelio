@@ -1,4 +1,4 @@
-import {renderPriceBreakdown,renderPlanComparison,renderPriceCalendar} from './travel-insights.js?v=2.6.0';
+import {renderPriceBreakdown,renderPlanComparison,renderPriceCalendar} from './travel-insights.js?v=2.6.1';
 const FLIGHT_PRICE_NOTICE='Los precios son orientativos y pueden cambiar. Confirma siempre el precio final y las condiciones en Google Flights o en la página de compra. Rumbiva no gestiona pagos ni reservas.';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
@@ -407,11 +407,12 @@ export function mountFlightSearch(container,options={}){
     form.elements.destination.value=origin;
     airportInputs.forEach(updateSuggestions);
   };
-  let controller=null,exploreController=null,destinationController=null;
+  let controller=null,exploreController=null,destinationController=null,restoredFlightQuery=null;
+  form.addEventListener('input',()=>{restoredFlightQuery=null});form.addEventListener('change',()=>{restoredFlightQuery=null});
   const submit=async event=>{
     event.preventDefault();
     await airportsReady;
-    const query=readFlightQuery(form,airports),validation=validateFlightQuery(query);
+    const query={...readFlightQuery(form,airports),...(restoredFlightQuery||{})};restoredFlightQuery=null;const validation=validateFlightQuery(query);
     if(validation){output.innerHTML=`<div class="flight-error">${esc(validation)}</div>`;return}
     showResolvedAirport(form.elements.origin,query.origin);
     showResolvedAirport(form.elements.destination,query.destination);
@@ -480,7 +481,8 @@ export function mountFlightSearch(container,options={}){
         try{const response=await searchPublicProvider(provider,hotelQuery,{signal});hotels=response.results||[];hotelByDate.set(key,{at:Date.now(),hotels})}
         catch(error){failures.push(error.message||'No se pudo consultar el hotel.');return null}
       }
-      const hotel=hotels.filter(item=>item.persistable!==false&&Number(item.totalPrice)>0&&item.currency==='EUR'&&safeOfferUrl(item.url)).sort((a,b)=>a.totalPrice-b.totalPrice)[0];
+      const selectedHotel=query.selectedPlan?.hotel||query._plan?.hotel;
+      const hotel=hotels.filter(item=>(!selectedHotel||(String(item.name).trim().toLocaleLowerCase()===String(selectedHotel.name).trim().toLocaleLowerCase()&&(!selectedHotel.provider||item.provider===selectedHotel.provider)))&&item.persistable!==false&&Number(item.totalPrice)>0&&item.currency==='EUR'&&safeOfferUrl(item.url)).sort((a,b)=>a.totalPrice-b.totalPrice)[0];
       if(!hotel)return null;
       const total=Number(flight.flightPrice)+Number(hotel.totalPrice);
       if(query.maxBudget!==null&&total>query.maxBudget)return null;
@@ -534,9 +536,9 @@ export function mountFlightSearch(container,options={}){
   root.querySelectorAll('[data-flight-jump]').forEach(button=>button.addEventListener('click',()=>root.querySelector(`#${button.dataset.flightJump}`)?.scrollIntoView({behavior:'smooth',block:'start'})));
   syncTripType();syncReturnMinimum();
 
-  return {destroy(){controller?.abort();exploreController?.abort();destinationController?.abort();root.replaceChildren()},form};
+  return {restoreFlightSearch(filters){restoredFlightQuery=filters;form.requestSubmit();},async restoreSearch(filters){await airportsReady;const query={...filters,destinations:filters.destinations?.length?filters.destinations:[filters.destination],maxBudget:filters.maxBudget??null};if(query.flexible===false&&query.startDate<localIso(new Date())){destinationOutput.innerHTML='<p class="flight-info">Fechas guardadas ya pasadas. Elige nuevas fechas para consultar precios.</p>';return;}return runDestination(query);},destroy(){controller?.abort();exploreController?.abort();destinationController?.abort();root.replaceChildren()},form};
 }
 
 export {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,searchDestination,showResolvedAirport,validateFlightQuery,validateDestinationQuery};
 import {searchPublicProvider} from './providers.js?v=1.2.2';
-import {rankRadarPlans,radarShareUrl} from './radar-plans.js?v=2.6.0';
+import {rankRadarPlans,radarShareUrl} from './radar-plans.js?v=2.6.1';

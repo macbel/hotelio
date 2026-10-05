@@ -157,6 +157,60 @@ function vuelotel_owned_alert($db, $userId, $id) {
     $statement = $db->prepare('SELECT * FROM alerts WHERE id=? AND user_id=?'); $statement->execute(array($id, $userId));
     return $statement->fetch();
 }
+function vuelotel_alert_open_url($id) {
+    $valid = filter_var($id, FILTER_VALIDATE_INT, array('options' => array('min_range' => 1)));
+    if ($valid === false) throw new InvalidArgumentException('Identificador de alerta no válido.');
+    return vuelotel_app_url('abrir-alerta.html?alertId=' . $valid);
+}
+
+function vuelotel_alert_search($alert) {
+    $filters = json_decode((string) $alert['query_json'], true);
+    if (!is_array($filters) || !in_array($alert['type'], array('hotel', 'flight', 'combined', 'destination'), true)) throw new InvalidArgumentException('No se pudo restaurar esta búsqueda.');
+    unset($filters['_alertMode'], $filters['_threshold'], $filters['_coverageVersion']);
+    if ($alert['type'] === 'destination' && ($filters['_alertScope'] ?? '') === 'plan') {
+        $plan = $filters['_plan'] ?? null;
+        if (!is_array($plan)) throw new InvalidArgumentException('No se pudo restaurar el plan de esta alerta.');
+        $departure = DateTimeImmutable::createFromFormat('!Y-m-d', (string) ($plan['departureDate'] ?? ''), new DateTimeZone('UTC'));
+        $return = DateTimeImmutable::createFromFormat('!Y-m-d', (string) ($plan['returnDate'] ?? ''), new DateTimeZone('UTC'));
+        if (!$departure || !$return || $departure->format('Y-m-d') !== ($plan['departureDate'] ?? '') || $return->format('Y-m-d') !== ($plan['returnDate'] ?? '')
+            || $return <= $departure || $departure->diff($return)->days > 30 || trim((string) ($plan['hotelName'] ?? '')) === '') throw new InvalidArgumentException('No se pudo restaurar el plan de esta alerta.');
+        // Opening a followed plan restores its exact trip rather than its earlier flexible window.
+        $filters['flexible'] = false;
+        $filters['startDate'] = $departure->format('Y-m-d');
+        $filters['endDate'] = $filters['startDate'];
+        $filters['minNights'] = (int) $departure->diff($return)->days;
+        $filters['destinations'] = array($filters['destination']);
+        $filters['selectedPlan'] = array('departureDate' => $plan['departureDate'], 'returnDate' => $plan['returnDate'],
+            'destinationCode' => (string) $filters['destination'],
+            'destinationText' => (string) ($plan['destinationText'] ?? $filters['destination'] ?? ''), 'hotelName' => (string) $plan['hotelName'],
+            'hotel' => array('name' => (string) $plan['hotelName']), 'total' => $alert['last_price'], 'currency' => $alert['currency'],
+            'referenceOnly' => true);
+    }
+    return array('type' => $alert['type'], 'filters' => $filters, 'label' => $alert['label'], 'price' => $alert['last_price'],
+        'currency' => $alert['currency'], 'alertId' => (int) $alert['id']);
+}
+
+function vuelotel_open_alert($db, $userId, $id) {
+    $alert = vuelotel_owned_alert($db, (int) $userId, (int) $id);
+    if (!$alert) return null;
+    return array('search' => vuelotel_alert_search($alert), 'alert' => array('id' => (int) $alert['id'], 'active' => (int) $alert['active'],
+        'expires_at' => (int) $alert['expires_at'], 'expired' => (int) $alert['active'] !== 1 || (int) $alert['expires_at'] <= time()));
+}
+
+function vuelotel_alert_mail_content($alert, $decision) {
+    $reference = $decision['notificationReference'];
+    $verb = $decision['price'] > $reference ? 'ha subido' : 'ha bajado';
+    $url = vuelotel_alert_open_url($alert['id']);
+    $escape = function($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); };
+    $link = $escape($url);
+    $html = '<h2>' . $escape($alert['label']) . '</h2><p>El precio ' . $verb . ' de <strong>' . number_format($reference, 0, ',', '.')
+        . ' €</strong> a <strong>' . number_format($decision['price'], 0, ',', '.') . ' €</strong>.</p><p>Tu alerta seguirá activa hasta '
+        . date('d/m/Y', (int) $alert['expires_at']) . '.</p><p><a href="' . $link . '" style="display:inline-block;padding:12px 18px;background:#123f49;color:#fff;text-decoration:none;border-radius:8px">Abrir búsqueda</a></p>'
+        . '<p>Accede con la misma cuenta de Rumbiva para abrir esta búsqueda. Los precios son de referencia; vuelve a consultar para comprobarlos.</p>'
+        . '<p>Si el botón no se abre, copia este enlace en tu navegador:<br><a href="' . $link . '">' . $link . '</a></p>';
+    return array('subject' => 'El precio ' . $verb . ' · ' . preg_replace('/[\r\n]+/', ' ', (string) $alert['label']), 'html' => $html,
+        'text' => 'Abrir búsqueda: ' . $url);
+}
 function vuelotel_set_alert_conditions($db, $alert, $conditions, $resetBaseline = false) {
     $old = vuelotel_alert_conditions($alert);
     $changed = $old['mode'] !== $conditions['mode'] || $old['targetPrice'] != $conditions['targetPrice']

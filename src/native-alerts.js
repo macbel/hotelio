@@ -30,3 +30,15 @@ export async function watchNativeAlertOpens(callback){
   await deliver(await plugin().consumeOpen());
   return ()=>listener.remove();
 }
+
+export async function watchNativeSearchLinks(callback){
+  const links=globalThis.Capacitor?.Plugins?.RumbivaLinks;
+  if(!globalThis.Capacitor?.isNativePlatform?.()||!links)return ()=>{};
+  const deliver=detail=>{
+    const alertId=Number(detail?.alertId);
+    if(Number.isSafeInteger(alertId)&&alertId>0)callback({alertId});
+  };
+  const listener=await links.addListener('linkOpened',async()=>deliver(await links.consumeLink()));
+  await deliver(await links.consumeLink());
+  return ()=>listener.remove();
+}

@@ -108,9 +108,8 @@ foreach ($alerts as $alert) {
         }
         if ($price === null) throw new Exception('No se encontró un precio comparable.');
         $outcome = vuelotel_apply_alert_price($db, $alert, $price, $now, function($decision) use ($alert) {
-            $reference = $decision['notificationReference'];
-            $verb = $decision['price'] > $reference ? 'ha subido' : 'ha bajado';
-            return vuelotel_send_mail($alert['email'], 'El precio ' . $verb . ' · ' . $alert['label'], '<h2>' . htmlspecialchars($alert['label'], ENT_QUOTES, 'UTF-8') . '</h2><p>El precio ' . $verb . ' de <strong>' . number_format($reference, 0, ',', '.') . ' €</strong> a <strong>' . number_format($decision['price'], 0, ',', '.') . ' €</strong>.</p><p>Tu alerta seguirá activa hasta ' . date('d/m/Y', $alert['expires_at']) . '.</p>');
+            $mail = vuelotel_alert_mail_content($alert, $decision);
+            return vuelotel_send_mail($alert['email'], $mail['subject'], $mail['html']);
         }, $legacyFlightPrice);
         if ($outcome['sent']) $changed++;
         if ($outcome['error'] !== null) $errors[] = array('id' => (int) $alert['id'], 'error' => $outcome['error']);

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "es.alufi.vuelotel",
+      "sha256_cert_fingerprints": [
+        "A3:B5:F8:63:74:7A:DE:CA:6F:20:1B:E1:49:98:43:77:89:67:62:B7:C8:B5:DD:63:FF:8E:47:73:D4:F7:94:84"
+      ]
+    }
+  }
+]

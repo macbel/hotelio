@@ -9,4 +9,7 @@ for(const file of await readdir('dist/downloads').catch(()=>[])){
 await cp('src','dist/src',{recursive:true});
 let html=await readFile('index.html','utf8');
 await writeFile('dist/index.html',html);
+// A dedicated entry keeps Android mail links separate from shared plans,
+// password recovery, administration, and APK downloads.
+await writeFile('dist/abrir-alerta.html',html);
 console.log('Producción generada en dist/');

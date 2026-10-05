@@ -1,5 +1,6 @@
-import {alertConditions,conditionFields,wireConditions,readConditions,conditionsLabel,historyMarkup} from './alert-controls.js?v=2.6.0';
-import {nativeAlertsAvailable,nativeAlertsStatus,enableNativeAlerts,syncNativeAlerts,disableNativeAlerts,watchNativeAlertOpens} from './native-alerts.js?v=2.6.0';
+import {alertConditions,conditionFields,wireConditions,readConditions,conditionsLabel,historyMarkup} from './alert-controls.js?v=2.6.1';
+import {nativeAlertsAvailable,nativeAlertsStatus,enableNativeAlerts,syncNativeAlerts,disableNativeAlerts,watchNativeAlertOpens,watchNativeSearchLinks} from './native-alerts.js?v=2.6.1';
+import {alertIdFromUrl,rememberAlert,pendingAlert,forgetAlert,validAlertId} from './alert-links.js?v=2.6.1';
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const tokenKey='vuelotel-session-v1';
 // Capacitor sirve la aplicación con https://localhost. El protocolo por sí
@@ -31,7 +32,7 @@ function showAuth(mode='login'){
 
 async function handleAuth(event){
   event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),message=form.parentElement.querySelector('.account-message'),values=Object.fromEntries(new FormData(form));button.disabled=true;message.textContent='';
-  try{const data=await request('auth.php',{method:'POST',body:{action:form.dataset.auth,...values}});if(data.token){token=data.token;localStorage.setItem(tokenKey,token);session=data.user;await syncNativeAlerts(token,session.id).catch(()=>{});document.querySelector('#accountOverlay').hidden=true;syncHeader();await showAccount()}else{message.textContent=data.message||'Contraseña actualizada. Ya puedes iniciar sesión.';if(form.dataset.auth==='reset')history.replaceState(null,'',location.pathname+location.hash)}}catch(error){message.textContent=error.message}finally{button.disabled=false}
+  try{const data=await request('auth.php',{method:'POST',body:{action:form.dataset.auth,...values}});if(data.token){token=data.token;localStorage.setItem(tokenKey,token);session=data.user;await syncNativeAlerts(token,session.id).catch(()=>{});document.querySelector('#accountOverlay').hidden=true;syncHeader();if(pendingAlert())await openPendingAlert();else await showAccount()}else{message.textContent=data.message||'Contraseña actualizada. Ya puedes iniciar sesión.';if(form.dataset.auth==='reset')history.replaceState(null,'',location.pathname+location.hash)}}catch(error){message.textContent=error.message}finally{button.disabled=false}
 }
 
 function syncHeader(){
@@ -136,9 +137,45 @@ async function showAdminV2(){
   panel.querySelectorAll('[data-admin-delete]').forEach(button=>button.onclick=async()=>{const card=button.closest('[data-user-id]');if(confirm('¿Eliminar este usuario y todos sus datos?')){await request('admin-users.php',{method:'POST',body:{action:'delete',id:Number(card.dataset.userId)}});await showAdminV2()}});
 }
 
+let openingAlert=false;
+function alertLinkMessage(text,{retry=false}={}){
+  let host=document.querySelector('#alertLinkStatus');
+  if(!host){host=document.createElement('aside');host.id='alertLinkStatus';host.className='flight-info';host.setAttribute('role','status');document.querySelector('#app').prepend(host)}
+  host.replaceChildren(document.createTextNode(text));
+  if(retry){const button=document.createElement('button');button.className='ghost';button.textContent='Reintentar';button.onclick=()=>openPendingAlert();host.append(button)}
+  return host;
+}
+async function openPendingAlert(){
+  const id=pendingAlert();if(!id||openingAlert)return;
+  if(!session){alertLinkMessage('Accede a tu cuenta para abrir la búsqueda de esta alerta.');showAuth();return;}
+  openingAlert=true;const owner=Number(session.id);alertLinkMessage('Abriendo la búsqueda de la alerta…');
+  try{
+    const data=await request(`account.php?action=open_alert&id=${id}`);
+    if(Number(session?.id)!==owner||pendingAlert()!==id)return;
+    if(!data.search||!['hotel','flight','combined','destination'].includes(data.search.type))throw new Error('La alerta no contiene una búsqueda válida.');
+    forgetAlert();document.querySelector('#accountPanel').hidden=true;
+    const notice=alertLinkMessage(data.alert?.expired===true||data.alert?.active===0?'Alerta caducada. Consultando la búsqueda guardada sin reactivarla.':'Búsqueda restaurada. Consultando precios y disponibilidad actuales…');
+    if(!native()&&/Android/i.test(navigator.userAgent)){
+      const link=document.createElement('a'),fallback=`https://www.alufi.es/vuelotel/abrir-alerta.html?alertId=${id}`;
+      link.className='ghost';link.textContent='Abrir en Rumbiva';
+      link.href=`intent://www.alufi.es/vuelotel/abrir-alerta.html?alertId=${id}#Intent;scheme=https;package=es.alufi.vuelotel;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+      notice.append(link);
+    }
+    window.dispatchEvent(new CustomEvent('vuelotel:open-saved-search',{detail:{...data.search,autoSearch:true,fromAlert:true}}));
+  }catch(error){
+    if(Number(session?.id)!==owner)return;
+    if(error.status===401){session=null;token='';localStorage.removeItem(tokenKey);syncHeader();showAuth();alertLinkMessage('Accede de nuevo para abrir la alerta.');}
+    else if([403,404,410].includes(error.status)){forgetAlert();alertLinkMessage('Esta alerta ya no está disponible o pertenece a otra cuenta.');}
+    else alertLinkMessage('No se pudo abrir la alerta. Comprueba la conexión e inténtalo de nuevo.',{retry:true});
+  }finally{openingAlert=false;if(pendingAlert()&&pendingAlert()!==id)openPendingAlert();}
+}
 export async function mountAccount(){
   document.body.insertAdjacentHTML('beforeend','<div id="accountOverlay" class="account-overlay" hidden></div><aside id="accountPanel" class="account-panel" hidden></aside>');
   document.querySelector('#accountBtn')?.addEventListener('click',()=>session?showAccount():showAuth());document.querySelector('#adminBtn')?.addEventListener('click',showAdminV2);window.addEventListener('vuelotel:search-complete',event=>showSaveBar(event.detail));window.addEventListener('vuelotel:favorite',event=>saveFavorite(event.detail));
+  const linked=alertIdFromUrl(location.href);if(linked)rememberAlert(linked);
+  if(new URLSearchParams(location.search).has('alertId')||new URLSearchParams(location.search).has('alert')){const clean=new URL(location.href);clean.searchParams.delete('alertId');clean.searchParams.delete('alert');history.replaceState(null,'',clean.pathname+clean.search+clean.hash)}
+  let authReady=false;
+  await watchNativeSearchLinks(detail=>{if(validAlertId(detail.alertId)){rememberAlert(detail.alertId);if(authReady)openPendingAlert()}}).catch(()=>{});
   try{const data=await request('auth.php');session=data.user||null}catch(error){
     // Un fallo de red/offline no invalida una sesión que puede seguir siendo
     // válida. Solo una respuesta explícita del backend elimina el token.
@@ -150,5 +187,7 @@ export async function mountAccount(){
     if(!session||Number(detail.userId)!==Number(session.id))return;
     try{const data=await request('account.php');const own=data.alerts.find(item=>Number(item.id)===Number(detail.alertId));if(!own)return;await showAccount('alerts');const button=document.querySelector(`[data-alert-history="${Number(own.id)}"]`);button?.click();button?.closest('article')?.scrollIntoView({block:'center',behavior:'smooth'})}catch(error){await showAccount('alerts')}
   }).catch(()=>{});
+  authReady=true;
+  if(pendingAlert())await openPendingAlert();
   if(new URLSearchParams(location.search).has('reset'))showAuth();
 }

@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RumbivaAlertsPlugin.class);
+        registerPlugin(RumbivaLinksPlugin.class);
         super.onCreate(savedInstanceState);
         updater = new VuelotelUpdateChecker(this);
     }

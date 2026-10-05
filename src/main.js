@@ -1,9 +1,9 @@
-import {renderPriceBreakdown} from './travel-insights.js?v=2.6.0';
+import {renderPriceBreakdown} from './travel-insights.js?v=2.6.1';
 import {loadProviderConfiguration, searchPublicProvider} from './providers.js?v=1.2.2';
-import {mountFlightSearch} from './flights.js?v=2.6.0';
-import {mountCombinedSearch} from './combined.js?v=2.6.0';
-import {mountAccount} from './account.js?v=2.6.0';
-import {readRadarShare} from './radar-plans.js?v=2.6.0';
+import {mountFlightSearch} from './flights.js?v=2.6.1';
+import {mountCombinedSearch} from './combined.js?v=2.6.1';
+import {mountAccount} from './account.js?v=2.6.1';
+import {readRadarShare} from './radar-plans.js?v=2.6.1';
 
 const fallbackProviders=[{id:'stay22',name:'Stay22',enabled:true,capabilities:{price:true,accommodationType:false,board:false,images:true}}];
 let providerConfigurationPromise=loadProviderConfiguration().catch(()=>fallbackProviders);
@@ -15,6 +15,7 @@ let savedHotels=JSON.parse(localStorage.getItem(savedStoreKey)||'[]');
 if(!Array.isArray(savedHotels))savedHotels=[];
 const selectedSaved=new Set();
 let currentQuery=null;
+let restoredHotelQuery=null;
 
 const today = new Date();
 const iso = date => date.toISOString().slice(0, 10);
@@ -51,8 +52,8 @@ const moreFilters=document.createElement('details');moreFilters.className='more-
 ['#minPrice','#accommodationType','#board'].forEach(selector=>{const field=document.querySelector(selector)?.closest('.field');if(field)moreFilters.querySelector('.more-filters-grid').append(field)});
 hotelFields?.querySelector('.search-btn')?.before(moreFilters);
 
-mountFlightSearch('#flightView',{providersPromise:providerConfigurationPromise});
-mountCombinedSearch('#combinedView',{providersPromise:providerConfigurationPromise});
+const flightSearch=mountFlightSearch('#flightView',{providersPromise:providerConfigurationPromise});
+const combinedSearch=mountCombinedSearch('#combinedView',{providersPromise:providerConfigurationPromise});
 mountAccount();
 const setTravelView=(view,{history=true}={})=>{
   const flights=view==='flights';
@@ -86,6 +87,11 @@ const updateOnlineState=()=>{if(offlineNotice)offlineNotice.hidden=navigator.onL
 window.addEventListener('online',updateOnlineState);window.addEventListener('offline',updateOnlineState);updateOnlineState();
 
 const setField=(form,name,value)=>{if(form?.elements?.[name]&&value!==undefined&&value!==null)form.elements[name].value=String(value)};
+function submitRestored(form,departureDate,submit){
+  const today=new Date();const localToday=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  if(departureDate&&departureDate<localToday){const host=document.querySelector('#alertLinkStatus');if(host)host.textContent='Búsqueda cargada con las fechas guardadas, que ya han pasado. Elige nuevas fechas para consultar precios.';return;}
+  if(submit)submit();else form?.requestSubmit();
+}
 const openSavedSearch=event=>{
   const saved=event.detail||{},filters=saved.filters||{};
   if(saved.type==='destination'){
@@ -94,16 +100,16 @@ const openSavedSearch=event=>{
     ['origin','destination','flexiblePeriod','minNights','adults','children','infants','carryOnBags','checkedBags','maxBudget','stops'].forEach(name=>setField(form,name,filters[name]));
     if(Array.isArray(filters.destinations)){['destination','destination2','destination3'].forEach((name,index)=>setField(form,name,filters.destinations[index]||''))}
     if(form?.elements?.noEarlyDeparture)form.elements.noEarlyDeparture.checked=filters.noEarlyDeparture===true;
-    const plans=Array.isArray(filters.plans)?filters.plans:[],output=document.querySelector('#flightView .flight-destination-output');
-    if(output&&plans.length){output.innerHTML=`<aside class="flight-info"><strong>Planes guardados · precios de referencia</strong>${plans.map(plan=>`<p>${esc(plan.departureDate)} → ${esc(plan.returnDate)} · ${esc(plan.hotel?.name||'Hotel')} · ${esc(money(plan.total,plan.currency||'EUR'))} <a href="${esc(safeSelectionUrl(plan.flightLink,true))}" target="_blank" rel="noopener noreferrer">Vuelo ↗</a> <a href="${esc(safeSelectionUrl(plan.hotel?.url))}" target="_blank" rel="noopener noreferrer">Hotel ↗</a></p>`).join('')}<small>Consulta de nuevo para comprobar disponibilidad y precio actual.</small></aside>`}
-    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+    const plans=filters.selectedPlan?[filters.selectedPlan]:Array.isArray(filters.plans)?filters.plans:[],output=document.querySelector('#flightView .flight-destination-output');
+    if(output&&plans.length){output.innerHTML=`<aside class="flight-info"><strong>Planes guardados · precios de referencia</strong>${plans.map(plan=>`<p>${esc(plan.departureDate)} → ${esc(plan.returnDate)} · ${esc(plan.hotel?.name||'Hotel')} · ${esc(money(plan.total,plan.currency||'EUR'))} ${safeSelectionUrl(plan.flightLink,true)?`<a href="${esc(safeSelectionUrl(plan.flightLink,true))}" target="_blank" rel="noopener noreferrer">Vuelo ↗</a>`:''} ${safeSelectionUrl(plan.hotel?.url)?`<a href="${esc(safeSelectionUrl(plan.hotel?.url))}" target="_blank" rel="noopener noreferrer">Hotel ↗</a>`:''}</p>`).join('')}<small>Consulta de nuevo para comprobar disponibilidad y precio actual.</small></aside>`}
+    form?.scrollIntoView({behavior:'smooth',block:'start'});if(saved.autoSearch)flightSearch.restoreSearch(filters);return;
   }
   if(saved.type==='flight'){
     setTravelView('flights');
     const form=document.querySelector('#flightView .flight-form');
     ['tripType','origin','destination','departureDate','returnDate','adults','children','infants','travelClass','stops','carryOnBags','maxPrice'].forEach(name=>setField(form,name,filters[name]));
     form?.elements?.tripType.dispatchEvent(new Event('change',{bubbles:true}));form?.elements?.departureDate.dispatchEvent(new Event('change',{bubbles:true}));
-    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+    form?.scrollIntoView({behavior:'smooth',block:'start'});if(saved.autoSearch)submitRestored(form,filters.departureDate,()=>flightSearch.restoreFlightSearch(filters));return;
   }
   if(saved.type==='combined'){
     setTravelView('combined');
@@ -117,13 +123,13 @@ const openSavedSearch=event=>{
       const flightUrl=safeSelectionUrl(flight.searchUrl,true),hotelUrl=safeSelectionUrl(hotelSelection.url);
       output.innerHTML=`<aside class="flight-info"><strong>Selección guardada</strong><p>${esc(flight.airlines||route)} · ${esc(money(flight.price,flight.currency||selection.currency))}</p><p>${esc(hotelSelection.name||'Alojamiento')} · ${esc(money(hotelSelection.totalPrice,hotelSelection.currency||selection.currency))}</p><p>Total guardado: <strong>${esc(money(selection.total,selection.currency))}</strong>. Consulta de nuevo para confirmar disponibilidad y precio.</p><div class="combo-actions">${flightUrl?`<a href="${esc(flightUrl)}" target="_blank" rel="noopener noreferrer">Comprobar vuelo ↗</a>`:''}${hotelUrl?`<a href="${esc(hotelUrl)}" target="_blank" rel="noopener noreferrer">Comprobar hotel ↗</a>`:''}</div></aside>`;
     }
-    form?.scrollIntoView({behavior:'smooth',block:'start'});return;
+    form?.scrollIntoView({behavior:'smooth',block:'start'});if(saved.autoSearch)submitRestored(form,flight.departureDate||hotel.checkIn,()=>combinedSearch.restoreSearch(filters));return;
   }
   setTravelView('hotels');
   const destination=document.querySelector('#destination'),checkIn=document.querySelector('#checkIn'),checkOut=document.querySelector('#checkOut'),adults=document.querySelector('#adults'),children=document.querySelector('#children');
   if(destination&&filters.destination!==undefined)destination.value=filters.destination;if(checkIn&&filters.checkIn!==undefined)checkIn.value=filters.checkIn;if(checkOut&&filters.checkOut!==undefined)checkOut.value=filters.checkOut;if(adults&&filters.adults!==undefined)adults.value=String(filters.adults);
   if(children){children.value=String((filters.childrenAges||[]).length||filters.children||0);children.dispatchEvent(new Event('change',{bubbles:true}));document.querySelectorAll('.child-age').forEach((field,index)=>{if(filters.childrenAges?.[index]!==undefined)field.value=String(filters.childrenAges[index])})}
-  const min=document.querySelector('#minPrice'),max=document.querySelector('#maxPrice'),type=document.querySelector('#accommodationType'),board=document.querySelector('#board');if(min)min.value=filters.minPrice??'';if(max)max.value=filters.maxPrice??'';if(type&&filters.accommodationType!==undefined)type.value=filters.accommodationType;if(board&&filters.board!==undefined)board.value=filters.board;document.querySelector('#searchForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+  const min=document.querySelector('#minPrice'),max=document.querySelector('#maxPrice'),type=document.querySelector('#accommodationType'),board=document.querySelector('#board');if(min)min.value=filters.minPrice??'';if(max)max.value=filters.maxPrice??'';if(type&&filters.accommodationType!==undefined)type.value=filters.accommodationType;if(board&&filters.board!==undefined)board.value=filters.board;document.querySelector('#searchForm')?.scrollIntoView({behavior:'smooth',block:'start'});if(saved.autoSearch){restoredHotelQuery={...filters};submitRestored(document.querySelector('#searchForm'),filters.checkIn);}
 };
 window.addEventListener('vuelotel:open-saved-search',openSavedSearch);
 
@@ -246,11 +252,13 @@ function renderResults(query) {
   root.querySelectorAll('.result-img img').forEach(image=>image.addEventListener('error',()=>image.remove(),{once:true}));
 }
 
+document.querySelector('#searchForm').addEventListener('input',()=>{restoredHotelQuery=null});
+document.querySelector('#searchForm').addEventListener('change',()=>{restoredHotelQuery=null});
 document.querySelector('#searchForm').addEventListener('submit', async e => {
   e.preventDefault(); const btn=e.currentTarget.querySelector('button');
   const checkIn=document.querySelector('#checkIn').value, checkOut=document.querySelector('#checkOut').value;
   if (new Date(checkOut)<=new Date(checkIn)) { alert('La fecha de salida debe ser posterior a la entrada.'); return; }
-  const query=readQueryFromForm(); currentQuery=query;
+  const query={...readQueryFromForm(),...(restoredHotelQuery||{})};restoredHotelQuery=null;query.nights=nightsBetween(query.checkIn,query.checkOut);query.childrenAges=query.childrenAges||[];query.children=query.children??query.childrenAges.length;currentQuery=query;
   if(query.minPrice!==null&&query.maxPrice!==null&&query.minPrice>query.maxPrice){alert('El precio mínimo no puede superar al máximo.');return}
   btn.disabled=true; btn.textContent='Comparando…'; document.querySelector('#results').innerHTML='<div class="loading"><i></i><i></i><i></i></div>';
   errors=[];notices=[];
@@ -365,4 +373,4 @@ function openSaved(showComparison=false){
 
 document.querySelector('#savedBtn').onclick=()=>openSaved();
 updateSavedButton();
-if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=20'));
+if (!globalThis.Capacitor?.isNativePlatform?.()&&'serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=21'));

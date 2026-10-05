@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {enableNativeAlerts,syncNativeAlerts,disableNativeAlerts,watchNativeAlertOpens,nativeAlertsAvailable} from '../src/native-alerts.js';
+import {enableNativeAlerts,syncNativeAlerts,disableNativeAlerts,watchNativeAlertOpens,watchNativeSearchLinks,nativeAlertsAvailable} from '../src/native-alerts.js';
 
 test('denied permission explains failure and never persists a token',async()=>{
   let configured=0;
@@ -33,4 +33,15 @@ test('notification opens are consumed once for both cold start and warm events',
 });
 test('ordinary web usage never exposes the native notification opt-in',()=>{
   delete globalThis.Capacitor;assert.equal(nativeAlertsAvailable(),false);
+});
+
+test('search app links consume cold and warm IDs without requiring notification opt-in',async()=>{
+  const delivered=[];let handler,removed=0,pending={alertId:7};
+  globalThis.Capacitor={isNativePlatform:()=>true,Plugins:{RumbivaLinks:{addListener:async(event,callback)=>{assert.equal(event,'linkOpened');handler=callback;return {remove:()=>removed++};},consumeLink:async()=>{const value=pending;pending={};return value;}}}};
+  const dispose=await watchNativeSearchLinks(detail=>delivered.push(detail));
+  assert.deepEqual(delivered,[{alertId:7}]);
+  await handler();assert.equal(delivered.length,1);
+  pending={alertId:8};await handler();assert.deepEqual(delivered.at(-1),{alertId:8});
+  pending={alertId:9007199254740992};await handler();assert.equal(delivered.length,2);
+  dispose();assert.equal(removed,1);delete globalThis.Capacitor;
 });

@@ -3,6 +3,12 @@ require_once __DIR__ . '/user-bootstrap.php';
 require_once __DIR__ . '/alert-policy.php';
 $user=vuelotel_current_user();$db=vuelotel_db();$method=$_SERVER['REQUEST_METHOD']??'GET';
 if($method==='GET'){
+  if(($_GET['action']??'')==='open_alert'){
+    try{$opened=vuelotel_open_alert($db,(int)$user['id'],(int)($_GET['id']??0));}
+    catch(InvalidArgumentException $error){vuelotel_json(400,array('error'=>$error->getMessage()));}
+    if($opened===null)vuelotel_json(404,array('error'=>'No se encontró esta alerta.'));
+    vuelotel_json(200,$opened);
+  }
   if(($_GET['action']??'')==='alert_history'){
     $history=vuelotel_alert_history($db,(int)$user['id'],(int)($_GET['id']??0),max(0,(int)($_GET['beforeId']??0)));
     if($history===null)vuelotel_json(404,array('error'=>'No se encontró esta alerta.'));

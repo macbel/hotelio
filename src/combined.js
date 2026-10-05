@@ -1,6 +1,6 @@
-import {renderPriceBreakdown,renderPlanComparison} from './travel-insights.js?v=2.6.0';
+import {renderPriceBreakdown,renderPlanComparison} from './travel-insights.js?v=2.6.1';
 import {searchPublicProvider} from './providers.js?v=2.0.1';
-import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.6.0';
+import {FLIGHT_PRICE_NOTICE,resolveAirportCode,searchAirports,searchFlights,showResolvedAirport,validateFlightQuery} from './flights.js?v=2.6.1';
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
 const iso=date=>date.toISOString().slice(0,10);
@@ -54,6 +54,8 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     <div class="combo-output" aria-live="polite"></div>
   </section>`;
   const form=root.querySelector('.combo-form'),output=root.querySelector('.combo-output');
+  let restoredContext=null;
+  form.addEventListener('input',()=>{restoredContext=null});form.addEventListener('change',()=>{restoredContext=null});
   let airports=[],controller=null,flightOptions=[],hotelOptions=[],flightUrl='',combinedContext=null;
   const airportList=root.querySelector('#comboAirports'),airportInputs=[form.elements.origin,form.elements.destination];
   const updateSuggestions=input=>{airportList.innerHTML=searchAirports(input.value,airports).map(airport=>`<option value="${esc(`${[airport.city,airport.name,airport.country].filter(Boolean).join(' · ')} (${airport.iata})`)}"></option>`).join('')};
@@ -81,13 +83,14 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     event.preventDefault();await airportsReady;
     const data=new FormData(form),origin=resolveAirportCode(data.get('origin'),airports),destination=resolveAirportCode(data.get('destination'),airports);
     const adults=Number(data.get('adults')),children=Number(data.get('children')),departureDate=String(data.get('departureDate')),returnDate=String(data.get('returnDate'));
-    const flightQuery={tripType:'roundtrip',origin,destination,departureDate,returnDate,adults,children,infants:0,travelClass:String(data.get('travelClass')),stops:String(data.get('stops')),carryOnBags:Number(data.get('carryOnBags')),checkedBags:Number(data.get('checkedBags')),maxPrice:null};
+    const restore=restoredContext;restoredContext=null;
+    const flightQuery={tripType:'roundtrip',origin,destination,departureDate,returnDate,adults,children,infants:0,travelClass:String(data.get('travelClass')),stops:String(data.get('stops')),carryOnBags:Number(data.get('carryOnBags')),checkedBags:Number(data.get('checkedBags')),maxPrice:null,...(restore?.flight||{})};
     const validation=validateFlightQuery(flightQuery);if(validation){output.innerHTML=`<div class="flight-error">${esc(validation)}</div>`;return}
     showResolvedAirport(form.elements.origin,origin);
     showResolvedAirport(form.elements.destination,destination);
     const destinationText=destinationName(data.get('destination'),destination,airports),nights=nightsBetween(departureDate,returnDate);
-    const hotelQuery={destination:destinationText,checkIn:departureDate,checkOut:returnDate,adults,children,childrenAges:Array(children).fill(8),guests:adults+children,rooms:1,minPrice:null,maxPrice:null,accommodationType:'any',board:'any',currency:'EUR',nights};
-    combinedContext={flight:flightQuery,hotel:hotelQuery,checkedBags:Number(data.get('checkedBags'))};
+    const hotelQuery={destination:destinationText,checkIn:departureDate,checkOut:returnDate,adults,children,childrenAges:Array(children).fill(8),guests:adults+children,rooms:1,minPrice:null,maxPrice:null,accommodationType:'any',board:'any',currency:'EUR',nights,...(restore?.hotel||{})};
+    combinedContext={flight:flightQuery,hotel:hotelQuery,checkedBags:restore?.checkedBags??Number(data.get('checkedBags'))};
     controller?.abort();controller=new AbortController();const activeController=controller,button=form.querySelector('.flight-submit');button.disabled=true;button.textContent='Buscando…';
     output.innerHTML='<div class="flight-loading"><i></i><i></i><i></i><span>Consultando vuelos y alojamientos…</span></div>';
     try{
@@ -104,5 +107,5 @@ export function mountCombinedSearch(container,{providersPromise}={}){
     }catch(error){if(error.name!=='AbortError')output.innerHTML=`<div class="flight-error"><strong>No se pudo completar la búsqueda combinada.</strong><span>${esc(error.message||'Inténtalo de nuevo más tarde.')}</span></div>`}
     finally{if(controller===activeController){controller=null;button.disabled=false;button.textContent='Buscar hotel + vuelo →'}}
   });
-  return {destroy(){controller?.abort();root.replaceChildren()},form};
+  return {restoreSearch(filters){restoredContext=filters;form.requestSubmit();},destroy(){controller?.abort();root.replaceChildren()},form};
 }
